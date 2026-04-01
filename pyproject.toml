@@ -5,6 +5,9 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
+    "duckdb>=1.4.4",
+    "html2text>=2025.4.15",
+    "pymupdf>=1.26.5",
     "ruff>=0.15.8",
     "selenium>=4.36.0",
 ]
