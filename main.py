@@ -29,6 +29,7 @@ DOWNLOAD_DIR = os.path.join(os.getcwd(), "downloads")
 if not os.path.exists(DOWNLOAD_DIR):
     os.makedirs(DOWNLOAD_DIR)
 
+# Browser setup
 chrome_options = Options()
 prefs = {
     "download.default_directory": DOWNLOAD_DIR,
@@ -36,7 +37,6 @@ prefs = {
     "download.prompt_for_download": False,
 }
 
-# Browser setup
 chrome_options.add_experimental_option("prefs", prefs)
 driver = webdriver.Chrome(options=chrome_options)
 wait = WebDriverWait(driver, 10)
@@ -48,7 +48,6 @@ def was_downloaded(url):
         return False
     with open(LOG_FILE, "r") as f:
         return url in f.read()
-
 
 def mark_done(url):
     with open(LOG_FILE, "a") as f:
@@ -89,6 +88,7 @@ jeugdzorg_btn = WebDriverWait(driver, 10).until(
 # Klik op de knop
 jeugdzorg_btn.click()
 
+# Go through all pages
 logger.info("All buttons applied now start getting all urls")
 while True:
     print(f"Crawling page: {driver.current_url}")
