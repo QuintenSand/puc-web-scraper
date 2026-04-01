@@ -42,7 +42,7 @@ driver = webdriver.Chrome(options=chrome_options)
 wait = WebDriverWait(driver, 10)
 
 
-# --- 3. HELPER FUNCTIONS ---
+# --- HELPER FUNCTIONS ---
 def was_downloaded(url):
     if not os.path.exists(LOG_FILE):
         return False

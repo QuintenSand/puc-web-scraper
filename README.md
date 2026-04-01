@@ -22,7 +22,7 @@ A robust, two-phase Selenium-based scraper designed to navigate the PUC Overheid
 1. Clone the repository:
 
 ```
-git clone https://github.com/yourusername/puc-nza-scraper.git
+git clone https://github.com/QuintenSand/puc-web-scraper.git
 ```
 
 2. Install dependencies:
