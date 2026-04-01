@@ -1,0 +1,11 @@
+2026-04-01 15:24:40,563 - INFO - Start Phase 1: collecting urls
+2026-04-01 15:24:45,599 - INFO - All buttons applied now start getting all urls
+2026-04-01 15:24:45,950 - INFO - Reached end of list. Total URLs: 12
+2026-04-01 15:24:45,950 - INFO - Phase 2: Downloading PDFs
+2026-04-01 15:24:47,232 - INFO - Successfully downloaded: https://puc.overheid.nl/nza/doc/PUC_813538_22/1
+2026-04-01 15:24:54,075 - INFO - Successfully downloaded: https://puc.overheid.nl/nza/doc/PUC_808003_22/1
+2026-04-01 15:24:58,901 - INFO - Successfully downloaded: https://puc.overheid.nl/nza/doc/PUC_808529_22/1
+2026-04-01 15:25:03,721 - INFO - Successfully downloaded: https://puc.overheid.nl/nza/doc/PUC_813467_22/1
+2026-04-01 15:25:08,923 - INFO - Successfully downloaded: https://puc.overheid.nl/nza/doc/PUC_807340_22/1
+2026-04-01 15:25:13,836 - INFO - Successfully downloaded: https://puc.overheid.nl/nza/doc/PUC_808509_22/1
+2026-04-01 15:25:19,281 - INFO - Scraping process finished.

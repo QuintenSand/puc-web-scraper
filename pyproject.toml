@@ -1,0 +1,10 @@
+[project]
+name = "puc-web-scraper"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "ruff>=0.15.8",
+    "selenium>=4.36.0",
+]
