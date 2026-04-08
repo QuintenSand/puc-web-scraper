@@ -8,7 +8,7 @@
 # ChromeDriver resolution order:
 #   1. CHROME_DRIVER_PATH in config.py  — use this on offline / firewalled machines
 #   2. webdriver-manager                — downloads & caches the correct driver version
-#   3. Selenium's built-in manager      — last resort (requires access to googlechromelabs.github.io)
+#   3. Clear error with instructions    — if both above fail
 
 import os
 from contextlib import contextmanager
@@ -19,6 +19,27 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 
 from .config import CHROME_DRIVER_PATH, DOWNLOAD_DIR, PAGE_LOAD_TIMEOUT
+
+_MANUAL_SETUP_GUIDE = """
+ChromeDriver could not be located automatically.
+This usually means the machine cannot reach the ChromeDriver download servers
+(e.g. due to a firewall or proxy).
+
+To fix this, do the following steps:
+
+  1. Check your Chrome version:
+     Open Chrome → go to chrome://version → note the version number (e.g. 136.0.7103.93)
+
+  2. Download the matching ChromeDriver for Windows:
+     https://googlechromelabs.github.io/chrome-for-testing/
+     Pick the version that matches your Chrome, download 'chromedriver-win64.zip',
+     and extract chromedriver.exe to a folder (e.g. C:\\tools\\chromedriver.exe).
+
+  3. Set CHROME_DRIVER_PATH in src/config.py:
+     CHROME_DRIVER_PATH = r"C:\\tools\\chromedriver.exe"
+
+Then run the script again.
+"""
 
 
 def _build_options(download_dir: str) -> Options:
@@ -35,14 +56,14 @@ def _build_options(download_dir: str) -> Options:
     return opts
 
 
-def _get_service() -> Service | None:
+def _get_service() -> Service:
     """
-    Return a configured Service, or None to let Selenium use its default.
+    Return a configured ChromeDriver Service.
 
     Tries webdriver-manager first (handles version matching and local caching).
-    Falls back gracefully if it is not installed or fails.
+    If that fails, raises a clear error with manual setup instructions.
     """
-    # Manual override — highest priority
+    # Manual path — highest priority, always works offline
     if CHROME_DRIVER_PATH:
         return Service(executable_path=CHROME_DRIVER_PATH)
 
@@ -50,9 +71,8 @@ def _get_service() -> Service | None:
     try:
         from webdriver_manager.chrome import ChromeDriverManager
         return Service(ChromeDriverManager().install())
-    except Exception:
-        # Not installed or download failed — fall through to Selenium's own manager
-        return None
+    except Exception as e:
+        raise RuntimeError(_MANUAL_SETUP_GUIDE) from e
 
 
 @contextmanager
@@ -71,7 +91,7 @@ def get_driver(headless: bool = False):
         opts.add_argument("--headless=new")
 
     service = _get_service()
-    driver = webdriver.Chrome(service=service, options=opts) if service else webdriver.Chrome(options=opts)
+    driver = webdriver.Chrome(service=service, options=opts)
     wait = WebDriverWait(driver, PAGE_LOAD_TIMEOUT)
     try:
         yield driver, wait
