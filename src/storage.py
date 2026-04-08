@@ -14,6 +14,7 @@ def get_connection() -> duckdb.DuckDBPyConnection:
     """Open (or create) the database and ensure the schema exists."""
     con = duckdb.connect(DB_PATH)
     _create_schema(con)
+    _migrate_schema(con)
     return con
 
 
@@ -30,6 +31,46 @@ def _create_schema(con: duckdb.DuckDBPyConnection) -> None:
             scraped_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+
+def _migrate_schema(con: duckdb.DuckDBPyConnection) -> None:
+    """
+    Bring an older database up to the current schema without losing data.
+
+    The original schema used different column names:
+      - content_md  → content
+      - source_type → source_format
+
+    New columns (title, doc_date, doc_type) are added as nullable so
+    existing rows remain valid; they will be populated on re-scrape.
+    """
+    existing = {
+        row[0]
+        for row in con.execute("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'documents'
+        """).fetchall()
+    }
+
+    # Add any missing columns introduced in the new schema
+    new_columns = [
+        ("title",         "VARCHAR"),
+        ("doc_date",      "DATE"),
+        ("doc_type",      "VARCHAR"),
+        ("source_format", "VARCHAR"),
+        ("content",       "TEXT"),
+    ]
+    for col, col_type in new_columns:
+        if col not in existing:
+            con.execute(f"ALTER TABLE documents ADD COLUMN {col} {col_type}")
+
+    # Migrate data from old column names if they still exist
+    if "content_md" in existing:
+        con.execute("UPDATE documents SET content = content_md WHERE content IS NULL")
+
+    if "source_type" in existing:
+        con.execute("UPDATE documents SET source_format = source_type WHERE source_format IS NULL")
 
 
 # ---------------------------------------------------------------------------
