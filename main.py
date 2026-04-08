@@ -1,263 +1,312 @@
-# Main script to web scrape PUC
+# main.py
+# PUC web scraper — RAG-optimised edition.
 # https://puc.overheid.nl/nza/
+#
+# Run with:
+#   uv run python main.py
+#
+# Two-phase approach
+# ------------------
+# Phase 1 — URL collection:  navigate the paginated list, harvest every
+#            document link.
+# Phase 2 — Document processing:  visit each URL, extract text (HTML article
+#            or PDF fallback), chunk it for RAG, and persist to DuckDB.
 
+import logging
 import os
 import time
-import random
-import logging
-import html2text
-import duckdb
-import fitz
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 
-# --- Configuration ---
-# Configure logging
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+
+from src.browser import get_driver
+from src.config import (
+    BASE_URL,
+    INTER_PAGE_DELAY,
+    LOG_FILE,
+    MAX_RETRIES,
+    MIN_ARTICLE_LENGTH,
+    RETRY_BACKOFF,
+)
+from src.parser import (
+    chunk_text,
+    existing_pdfs,
+    html_to_text,
+    pdf_to_text,
+    wait_for_new_pdf,
+)
+from src.storage import (
+    count_chunks,
+    count_documents,
+    document_exists,
+    get_connection,
+    save_document,
+)
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("scraper_debug.log"),  # Saves everything to a file
-        logging.StreamHandler(),  # Also prints to your console
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler(),
     ],
 )
 logger = logging.getLogger(__name__)
-LOG_FILE = "download_history.txt"
 
-# Add download map
-DOWNLOAD_DIR = os.path.join(os.getcwd(), "downloads")
-if not os.path.exists(DOWNLOAD_DIR):
-    os.makedirs(DOWNLOAD_DIR)
 
-# Browser setup
-chrome_options = Options()
-prefs = {
-    "download.default_directory": DOWNLOAD_DIR,
-    "plugins.always_open_pdf_externally": True,
-    "download.prompt_for_download": False,
-}
+# ---------------------------------------------------------------------------
+# Retry decorator
+# ---------------------------------------------------------------------------
 
-chrome_options.add_experimental_option("prefs", prefs)
-driver = webdriver.Chrome(options=chrome_options)
-wait = WebDriverWait(driver, 10)
+def with_retry(fn, *args, retries: int = MAX_RETRIES, backoff: float = RETRY_BACKOFF, **kwargs):
+    """
+    Call *fn* up to *retries* times, doubling the sleep between attempts.
+    Returns the function's return value or None if all attempts fail.
+    """
+    for attempt in range(1, retries + 1):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:
+            if attempt == retries:
+                logger.error("All %d attempts failed for %s: %s", retries, fn.__name__, exc)
+                return None
+            wait = backoff * (2 ** (attempt - 1))
+            logger.warning("Attempt %d/%d failed (%s). Retrying in %.1fs…", attempt, retries, exc, wait)
+            time.sleep(wait)
 
-# --- 1. DUCKDB SETUP ---
-con = duckdb.connect("puc_data.db")
-con.execute("""
-    CREATE TABLE IF NOT EXISTS documents (
-        puc_id VARCHAR PRIMARY KEY,
-        url VARCHAR,
-        content_md TEXT,
-        source_type VARCHAR,
-        scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
+# ---------------------------------------------------------------------------
+# Phase 1 — URL collection
+# ---------------------------------------------------------------------------
+
+def collect_urls(driver, wait: WebDriverWait) -> list[str]:
+    """
+    Navigate the PUC NZa list (with 'Alle' + 'Geldig vandaag' filters applied)
+    and return every unique document URL found across all pages.
+    """
+    logger.info("Phase 1: collecting document URLs from %s", BASE_URL)
+    driver.get(BASE_URL)
+
+    # Apply "Alle" filter
+    alle_btn = wait.until(
+        EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Alle')]"))
     )
-""")
+    alle_btn.click()
 
-# --- 2. HTML TO MARKDOWN SETUP ---
-h = html2text.HTML2Text()
-h.ignore_links = False
-h.ignore_images = True
-h.body_width = 0  # No line wrapping
+    # Apply "Geldig vandaag" filter
+    geldig_btn = wait.until(
+        EC.element_to_be_clickable((By.XPATH, "//label[contains(., 'Geldig vandaag')]"))
+    )
+    geldig_btn.click()
 
-# --- HELPER FUNCTIONS ---
-def was_downloaded(url):
-    if not os.path.exists(LOG_FILE):
-        return False
-    with open(LOG_FILE, "r") as f:
-        return url in f.read()
+    all_urls: list[str] = []
+    page = 1
 
-def mark_done(url):
-    with open(LOG_FILE, "a") as f:
-        f.write(url + "\n")
+    while True:
+        logger.info("Crawling list page %d (%s)", page, driver.current_url)
 
-def scrape_to_markdown(url):
-    # Check if we already have this in DuckDB
-    exists = con.execute("SELECT 1 FROM documents WHERE url = ?", [url]).fetchone()
-    if exists:
-        return False
-
-    driver.get(url)
-    try:
-        # Find the main text body. PUC usually puts text in a specific div.
-        # If 'article' doesn't work, we use a broader div.
-        wait.until(EC.presence_of_element_located((By.TAG_NAME, "article")))
-        content_element = driver.find_element(By.TAG_NAME, "article")
-        
-        html_content = content_element.get_attribute('innerHTML')
-        markdown_text = h.handle(html_content)
-        
-        # Extract PUC ID from URL (e.g., PUC_813946_22)
-        puc_id = url.split('/')[-3] if 'doc/' in url else url.split('/')[-2]
-
-        # Save to DuckDB
-        con.execute("""
-        INSERT OR REPLACE INTO documents (puc_id, url, content_md, source_type)
-        VALUES (?, ?, ?, ?)
-        """, [puc_id, url, markdown_text, "html"])
-        
-        return True
-    except Exception as e:
-        logger.error(f"Failed to extract text from {url}: {e}")
-        return False
-
-def extract_pdf_to_md(pdf_path):
-    """
-    Fast extraction using PyMuPDF. 
-    It extracts text blocks and attempts to maintain basic formatting.
-    """
-    try:
-        doc = fitz.open(pdf_path)
-        full_text = ""
-        for page in doc:
-            # "blocks" helps maintain some layout integrity
-            blocks = page.get_text("blocks")
-            for b in blocks:
-                # b[4] is the text content of the block
-                full_text += b[4] + "\n"
-        return full_text
-    except Exception as e:
-        logging.error(f"PyMuPDF failed on {pdf_path}: {e}")
-        return ""
-
-def save_to_db(puc_id, url, text, source):
-    con.execute("""
-        INSERT OR REPLACE INTO documents (puc_id, url, content_md, source_type)
-        VALUES (?, ?, ?, ?)
-    """, [puc_id, url, text, source])
-
-def wait_for_pdf(timeout=30):
-    start_time = time.time()
-    while time.time() - start_time < timeout:
-        files = [f for f in os.listdir(DOWNLOAD_DIR) if f.endswith('.pdf') and not f.endswith('.crdownload')]
-        if files:
-            full_path = os.path.join(DOWNLOAD_DIR, files[0])
-            return full_path
-        time.sleep(1)
-    return None
-
-# --- Phase 1: Collecting all urls ---
-logger.info("Start Phase 1: collecting urls")
-all_doc_urls = []
-
-# 1. Start at the main list
-driver.get("https://puc.overheid.nl/nza/")
-alle_btn = wait.until(
-    EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Alle')]"))
-)
-alle_btn.click()
-
-# Click on geldig vandaag button
-# Wacht tot de knop klikbaar is
-geldig_vandaag_btn = driver.find_element(
-    By.XPATH, "//label[contains(., 'Geldig vandaag')]"
-)
-
-# Klik op de knop
-geldig_vandaag_btn.click()
-
-# Voor de test doen we alleen Jeugdzorg
-# Wacht tot de knop klikbaar is
-#jeugdzorg_btn = WebDriverWait(driver, 10).until(
-#    EC.element_to_be_clickable(
-#        (
-#            By.XPATH,
-#            "//a[contains(normalize-space(), 'Jeugdzorg')] | //label[contains(normalize-space(), 'Jeugdzorg')]",
-#        )
-#    )
-#)
-
-# Klik op de knop
-#jeugdzorg_btn.click()
-
-# Go through all pages
-logger.info("All buttons applied now start getting all urls")
-while True:
-    print(f"Crawling page: {driver.current_url}")
-    wait.until(
-        EC.presence_of_all_elements_located(
-            (By.XPATH, "//a[contains(@href, 'doc/PUC_')]")
+        wait.until(
+            EC.presence_of_all_elements_located(
+                (By.XPATH, "//a[contains(@href, 'doc/PUC_')]")
+            )
         )
-    )
+        links = driver.find_elements(By.XPATH, "//a[contains(@href, 'doc/PUC_')]")
+        logger.info("  Found %d links on this page", len(links))
+        for link in links:
+            href = link.get_attribute("href")
+            if href:
+                all_urls.append(href)
 
-    # Extract links from the current page
-    links = driver.find_elements(By.XPATH, "//a[contains(@href, 'doc/PUC_')]")
-    print(f"Found: {len(links)} urls")
-    for link in links:
-        all_doc_urls.append(link.get_attribute("href"))
+        # Try to advance to the next page
+        try:
+            next_btn = driver.find_element(By.XPATH, "//a[contains(., 'Volgende')]")
+            driver.execute_script("arguments[0].scrollIntoView();", next_btn)
+            next_btn.click()
+            time.sleep(INTER_PAGE_DELAY)
+            page += 1
+        except Exception:
+            logger.info("No 'Volgende' button found — reached last page.")
+            break
 
-    # Try to go to the next page
+    unique_urls = list(dict.fromkeys(all_urls))   # deduplicate, preserve order
+    logger.info("Phase 1 complete. Collected %d unique URLs.", len(unique_urls))
+    return unique_urls
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 — Document processing
+# ---------------------------------------------------------------------------
+
+def _puc_id_from_url(url: str) -> str:
+    """Extract the PUC identifier from a document URL."""
+    parts = url.rstrip("/").split("/")
+    # URL patterns:
+    #   …/doc/PUC_123456_22/          → parts[-2] == 'PUC_123456_22'
+    #   …/doc/PUC_123456_22/1/        → parts[-3] == 'PUC_123456_22'
+    for part in reversed(parts):
+        if part.startswith("PUC_"):
+            return part
+    # Fallback: use the last meaningful segment
+    return parts[-1] or parts[-2]
+
+
+def _extract_metadata(driver) -> dict:
+    """
+    Best-effort extraction of title, date, and document type from the page.
+    Returns a dict with keys: title, doc_date, doc_type.
+    All values may be None if not found.
+    """
+    meta: dict = {"title": None, "doc_date": None, "doc_type": None}
+
+    # Title — typically in <h1> or <title>
     try:
-        next_xpath = "//a[contains(., 'Volgende')]"
-        next_btn = driver.find_element(By.XPATH, next_xpath)
+        meta["title"] = driver.find_element(By.TAG_NAME, "h1").text.strip() or None
+    except Exception:
+        pass
 
-        # Scroll and click
-        driver.execute_script("arguments[0].scrollIntoView();", next_btn)
-        next_btn.click()
-        time.sleep(3)  # Wait for Ajax
+    # Publication date — PUC pages often have a <time> element or a dt/dd pair
+    try:
+        time_el = driver.find_element(By.TAG_NAME, "time")
+        meta["doc_date"] = time_el.get_attribute("datetime") or time_el.text.strip() or None
+    except Exception:
+        pass
 
-    except:
-        logging.exception(f"{link} failed because there is no Volgende button")
-        break
+    # Document type — look for a <dd> near a <dt> that says "Soort"
+    try:
+        dt_els = driver.find_elements(By.TAG_NAME, "dt")
+        for dt in dt_els:
+            if "soort" in dt.text.lower() or "type" in dt.text.lower():
+                dd = dt.find_element(By.XPATH, "following-sibling::dd[1]")
+                meta["doc_type"] = dd.text.strip() or None
+                break
+    except Exception:
+        pass
 
-    logger.info(f"Reached end of list. Total URLs: {len(all_doc_urls)}")
-    print("Reached the end of the list.")
+    return meta
 
-print(f"Total URLs collected: {len(all_doc_urls)}")
 
-# --- Phase 2: Processing documents --- #
-logger.info("Phase 2: Processing Documents")
-# Iterate through all urls and download pdfs
-unique_doc_urls = list(set(all_doc_urls))
-for url in unique_doc_urls:
-    puc_id = url.split('/')[-3] if 'doc/' in url else url.split('/')[-2]
-        
-    # Check DuckDB if already exists
-    if con.execute("SELECT 1 FROM documents WHERE puc_id = ?", [puc_id]).fetchone():
-        continue
+def process_document(driver, wait: WebDriverWait, con, url: str) -> bool:
+    """
+    Visit *url*, extract and chunk the document text, and save to DuckDB.
+    Returns True on success, False on failure.
+    """
+    puc_id = _puc_id_from_url(url)
+
+    if document_exists(con, puc_id):
+        logger.debug("Already in DB, skipping: %s", puc_id)
+        return True
 
     driver.get(url)
-    time.sleep(3)
-        
+    time.sleep(2)   # brief pause; the site uses some JS rendering
+
+    meta = _extract_metadata(driver)
+    source_format = "HTML"
+    text = ""
+
     try:
-        # Option A: Try HTML Article
-        article = driver.find_elements(By.TAG_NAME, "article")
-        if article and len(article[0].text.strip()) > 300:
-            md = h.handle(article[0].get_attribute('innerHTML'))
-            save_to_db(puc_id, url, md, "HTML")
-            logger.info(f"Saved HTML: {puc_id}")
-            
-        # Option B: Download PDF and rip text
+        # --- Option A: HTML article ---
+        articles = driver.find_elements(By.TAG_NAME, "article")
+        if articles and len(articles[0].text.strip()) >= MIN_ARTICLE_LENGTH:
+            html = articles[0].get_attribute("innerHTML")
+            text = html_to_text(html)
+            source_format = "HTML"
+
+        # --- Option B: PDF download ---
         else:
-            btn_xpath = "//a[contains(., 'Maak een PDF')] | //a[contains(., 'PDF Openen')]"
-            wait.until(EC.element_to_be_clickable((By.XPATH, btn_xpath))).click()
-                
-            # Check for secondary button if site requires it
+            pdf_btn_xpath = (
+                "//a[contains(., 'Maak een PDF')]"
+                " | //a[contains(., 'PDF Openen')]"
+            )
+            pdf_btn = wait.until(EC.element_to_be_clickable((By.XPATH, pdf_btn_xpath)))
+            before = existing_pdfs()
+            pdf_btn.click()
+
+            # Some pages show a "Klaar!" confirmation button
             try:
-                finish_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Klaar!')]")))
+                finish_btn = WebDriverWait(driver, 5).until(
+                    EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Klaar!')]"))
+                )
                 finish_btn.click()
-            except: 
-                pass
+            except Exception:
+                pass  # No confirmation step needed
 
-            pdf_path = wait_for_pdf()
+            pdf_path = wait_for_new_pdf(before)
             if pdf_path:
-                pdf_text = extract_pdf_to_md(pdf_path)
-                save_to_db(puc_id, url, pdf_text, "PDF")
-                os.remove(pdf_path) # Clean up
-                logger.info(f"Saved PDF-to-Text: {puc_id}")
+                text = pdf_to_text(pdf_path)
+                source_format = "PDF"
+                os.remove(pdf_path)
+            else:
+                logger.warning("PDF download timed out for %s", puc_id)
+                return False
 
-    except Exception as e:
-        logger.error(f"Error on {url}: {e}")
+    except Exception:
+        logger.exception("Error extracting content from %s", url)
+        return False
 
-# Finish proces and logging.
-logger.info("Scraping process finished.")
-driver.quit()
+    if not text.strip():
+        logger.warning("No text extracted from %s", puc_id)
+        return False
 
-results = con.execute("""
-    SELECT *
-    FROM documents 
-""").fetchall()
+    chunks = chunk_text(text)
+    save_document(
+        con,
+        puc_id,
+        url,
+        chunks,
+        title=meta["title"],
+        doc_date=meta["doc_date"],
+        doc_type=meta["doc_type"],
+        source_format=source_format,
+    )
+    logger.info(
+        "Saved %s | format=%s | chunks=%d | title=%s",
+        puc_id, source_format, len(chunks), meta["title"],
+    )
+    return True
 
-print(results)
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    con = get_connection()
+
+    with get_driver() as (driver, wait):
+        # Phase 1 — collect URLs
+        urls = collect_urls(driver, wait)
+
+        # Phase 2 — process documents
+        logger.info("Phase 2: processing %d documents", len(urls))
+        success, skipped, failed = 0, 0, 0
+
+        for i, url in enumerate(urls, 1):
+            puc_id = _puc_id_from_url(url)
+            if document_exists(con, puc_id):
+                skipped += 1
+                continue
+
+            logger.info("[%d/%d] Processing %s", i, len(urls), puc_id)
+            ok = with_retry(process_document, driver, wait, con, url)
+            if ok:
+                success += 1
+            else:
+                failed += 1
+
+    logger.info(
+        "Scraping finished. Documents — success: %d | skipped: %d | failed: %d",
+        success, skipped, failed,
+    )
+    logger.info(
+        "Database totals — documents: %d | chunks: %d",
+        count_documents(con), count_chunks(con),
+    )
+    con.close()
+
+
+if __name__ == "__main__":
+    main()
