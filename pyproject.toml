@@ -10,4 +10,5 @@ dependencies = [
     "pymupdf>=1.26.5",
     "ruff>=0.15.8",
     "selenium>=4.36.0",
+    "webdriver-manager>=4.0.0",
 ]

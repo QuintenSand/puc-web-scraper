@@ -404,3 +404,185 @@ Stacktrace:
 2026-04-01 19:00:39,219 - INFO - Reached end of list. Total URLs: 6640
 2026-04-01 19:00:43,848 - INFO - Reached end of list. Total URLs: 6680
 2026-04-01 19:00:48,468 - INFO - Reached end of list. Total URLs: 6720
+2026-04-08 15:26:42,277 - INFO - Phase 1: collecting document URLs from https://puc.overheid.nl/nza/
+2026-04-08 15:26:47,268 - INFO - Crawling list page 1 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/1/)
+2026-04-08 15:26:47,306 - INFO -   Found 40 links on this page
+2026-04-08 15:26:51,873 - INFO - Crawling list page 2 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/2/thm/NZA000/)
+2026-04-08 15:26:51,897 - INFO -   Found 40 links on this page
+2026-04-08 15:26:56,379 - INFO - Crawling list page 3 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/3/thm/NZA000/)
+2026-04-08 15:26:56,411 - INFO -   Found 40 links on this page
+2026-04-08 15:27:01,035 - INFO - Crawling list page 4 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/4/thm/NZA000/)
+2026-04-08 15:27:01,063 - INFO -   Found 40 links on this page
+2026-04-08 15:27:05,432 - INFO - Crawling list page 5 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/5/thm/NZA000/)
+2026-04-08 15:27:05,453 - INFO -   Found 40 links on this page
+2026-04-08 15:27:10,027 - INFO - Crawling list page 6 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/6/thm/NZA000/)
+2026-04-08 15:27:10,053 - INFO -   Found 40 links on this page
+2026-04-08 15:27:14,448 - INFO - Crawling list page 7 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/7/thm/NZA000/)
+2026-04-08 15:27:14,474 - INFO -   Found 40 links on this page
+2026-04-08 15:27:18,940 - INFO - Crawling list page 8 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/8/thm/NZA000/)
+2026-04-08 15:27:18,967 - INFO -   Found 40 links on this page
+2026-04-08 15:27:23,607 - INFO - Crawling list page 9 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/9/thm/NZA000/)
+2026-04-08 15:27:23,631 - INFO -   Found 40 links on this page
+2026-04-08 15:27:28,341 - INFO - Crawling list page 10 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/10/thm/NZA000/)
+2026-04-08 15:27:28,370 - INFO -   Found 40 links on this page
+2026-04-08 15:27:32,959 - INFO - Crawling list page 11 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/11/thm/NZA000/)
+2026-04-08 15:27:32,989 - INFO -   Found 40 links on this page
+2026-04-08 15:27:37,382 - INFO - Crawling list page 12 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/12/thm/NZA000/)
+2026-04-08 15:27:37,407 - INFO -   Found 40 links on this page
+2026-04-08 15:27:41,596 - WARNING - Retrying (Retry(total=2, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ConnectionResetError(54, 'Connection reset by peer')': /session/f364b013e28f38a59108522483467743
+2026-04-08 15:27:41,599 - WARNING - Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError("HTTPConnection(host='localhost', port=53792): Failed to establish a new connection: [Errno 61] Connection refused")': /session/f364b013e28f38a59108522483467743
+2026-04-08 15:27:41,602 - WARNING - Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError("HTTPConnection(host='localhost', port=53792): Failed to establish a new connection: [Errno 61] Connection refused")': /session/f364b013e28f38a59108522483467743
+2026-04-08 15:56:43,700 - INFO - Fetching available filter categories from https://puc.overheid.nl/nza/ …
+2026-04-08 15:56:46,811 - INFO - Found 20 category options.
+2026-04-08 15:57:25,596 - INFO - Phase 1: collecting document URLs from https://puc.overheid.nl/nza/
+2026-04-08 15:57:27,455 - INFO - Filter applied: Geldig vandaag
+2026-04-08 15:57:37,457 - WARNING - Could not apply category filter 'Beleid en regels5500' — skipping.
+2026-04-08 15:57:37,465 - INFO - Crawling list page 1 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/1/)
+2026-04-08 15:57:37,501 - INFO -   Found 40 links on this page
+2026-04-08 15:57:41,982 - INFO - Crawling list page 2 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/2/thm/NZA000/)
+2026-04-08 15:57:42,008 - INFO -   Found 40 links on this page
+2026-04-08 15:57:46,476 - INFO - Crawling list page 3 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/3/thm/NZA000/)
+2026-04-08 15:57:46,505 - INFO -   Found 40 links on this page
+2026-04-08 15:57:50,769 - WARNING - Retrying (Retry(total=2, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ConnectionResetError(54, 'Connection reset by peer')': /session/ae7c78f02edb028de9fcfe085b03dc34
+2026-04-08 15:57:50,773 - WARNING - Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError("HTTPConnection(host='localhost', port=54137): Failed to establish a new connection: [Errno 61] Connection refused")': /session/ae7c78f02edb028de9fcfe085b03dc34
+2026-04-08 15:57:50,776 - WARNING - Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError("HTTPConnection(host='localhost', port=54137): Failed to establish a new connection: [Errno 61] Connection refused")': /session/ae7c78f02edb028de9fcfe085b03dc34
+2026-04-08 15:57:56,414 - INFO - Fetching available filter categories from https://puc.overheid.nl/nza/ …
+2026-04-08 15:57:59,550 - INFO - Found 20 category options.
+2026-04-08 15:58:50,761 - INFO - Phase 1: collecting document URLs from https://puc.overheid.nl/nza/
+2026-04-08 15:58:52,538 - INFO - Filter applied: Geldig vandaag
+2026-04-08 15:58:56,336 - INFO - Filter applied: category = Consultatie9
+2026-04-08 15:58:56,353 - INFO - Crawling list page 1 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/1/inf/consultatie/)
+2026-04-08 15:58:56,389 - INFO -   Found 18 links on this page
+2026-04-08 15:58:56,608 - INFO - No 'Volgende' button found — reached last page.
+2026-04-08 15:58:56,608 - INFO - Phase 1 complete. Collected 9 unique URLs.
+2026-04-08 15:58:56,608 - INFO - Phase 2: processing 9 documents
+2026-04-08 15:58:56,648 - INFO - [1/9] Processing PUC_638339_22
+2026-04-08 15:59:05,422 - WARNING - Attempt 1/3 failed (Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"). Retrying in 2.0s…
+2026-04-08 15:59:15,915 - WARNING - Attempt 2/3 failed (Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"). Retrying in 4.0s…
+2026-04-08 15:59:28,137 - ERROR - All 3 attempts failed for process_document: Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"
+2026-04-08 15:59:28,139 - INFO - [2/9] Processing PUC_3613_22
+2026-04-08 15:59:36,912 - WARNING - Attempt 1/3 failed (Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"). Retrying in 2.0s…
+2026-04-08 15:59:47,517 - WARNING - Attempt 2/3 failed (Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"). Retrying in 4.0s…
+2026-04-08 16:00:00,156 - ERROR - All 3 attempts failed for process_document: Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"
+2026-04-08 16:00:00,158 - INFO - [3/9] Processing PUC_12796_22
+2026-04-08 16:00:09,083 - WARNING - Attempt 1/3 failed (Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"). Retrying in 2.0s…
+2026-04-08 16:00:19,516 - WARNING - Attempt 2/3 failed (Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"). Retrying in 4.0s…
+2026-04-08 16:00:31,797 - ERROR - All 3 attempts failed for process_document: Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"
+2026-04-08 16:00:31,799 - INFO - [4/9] Processing PUC_3331_22
+2026-04-08 16:00:40,293 - WARNING - Attempt 1/3 failed (Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"). Retrying in 2.0s…
+2026-04-08 16:00:50,495 - WARNING - Attempt 2/3 failed (Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"). Retrying in 4.0s…
+2026-04-08 16:01:02,748 - ERROR - All 3 attempts failed for process_document: Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"
+2026-04-08 16:01:02,750 - INFO - [5/9] Processing PUC_3307_22
+2026-04-08 16:01:11,595 - WARNING - Attempt 1/3 failed (Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"). Retrying in 2.0s…
+2026-04-08 16:01:22,223 - WARNING - Attempt 2/3 failed (Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"). Retrying in 4.0s…
+2026-04-08 16:01:34,911 - ERROR - All 3 attempts failed for process_document: Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"
+2026-04-08 16:01:34,912 - INFO - [6/9] Processing PUC_3225_22
+2026-04-08 16:01:44,040 - WARNING - Attempt 1/3 failed (Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"). Retrying in 2.0s…
+2026-04-08 16:01:55,303 - WARNING - Attempt 2/3 failed (Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"). Retrying in 4.0s…
+2026-04-08 16:02:08,154 - ERROR - All 3 attempts failed for process_document: Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"
+2026-04-08 16:02:08,156 - INFO - [7/9] Processing PUC_3221_22
+2026-04-08 16:02:17,665 - WARNING - Attempt 1/3 failed (Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"). Retrying in 2.0s…
+2026-04-08 16:02:28,827 - WARNING - Attempt 2/3 failed (Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"). Retrying in 4.0s…
+2026-04-08 16:02:42,212 - ERROR - All 3 attempts failed for process_document: Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"
+2026-04-08 16:02:42,213 - INFO - [8/9] Processing PUC_3210_22
+2026-04-08 16:02:52,607 - WARNING - Attempt 1/3 failed (Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"). Retrying in 2.0s…
+2026-04-08 16:03:04,879 - WARNING - Attempt 2/3 failed (Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"). Retrying in 4.0s…
+2026-04-08 16:03:19,119 - ERROR - All 3 attempts failed for process_document: Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"
+2026-04-08 16:03:19,120 - INFO - [9/9] Processing PUC_3068_22
+2026-04-08 16:03:28,243 - WARNING - Attempt 1/3 failed (Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"). Retrying in 2.0s…
+2026-04-08 16:03:38,803 - WARNING - Attempt 2/3 failed (Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"). Retrying in 4.0s…
+2026-04-08 16:03:51,375 - ERROR - All 3 attempts failed for process_document: Binder Error: Table "documents" does not have a column with name "title"
+
+Did you mean: "content_md"
+2026-04-08 16:03:52,012 - INFO - Scraping finished. Documents — success: 0 | skipped: 0 | failed: 9
+2026-04-08 16:03:52,027 - INFO - Database totals — documents: 1
+2026-04-08 16:08:10,291 - INFO - Fetching available filter categories from https://puc.overheid.nl/nza/ …
+2026-04-08 16:08:13,743 - INFO - Found 20 category options.
+2026-04-08 16:08:30,644 - INFO - Phase 1: collecting document URLs from https://puc.overheid.nl/nza/
+2026-04-08 16:08:33,471 - INFO - Filter applied: Geldig vandaag
+2026-04-08 16:08:36,849 - INFO - Filter applied: category = Consultatie9
+2026-04-08 16:08:36,860 - INFO - Crawling list page 1 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/1/inf/consultatie/)
+2026-04-08 16:08:36,888 - INFO -   Found 18 links on this page
+2026-04-08 16:08:37,081 - INFO - No 'Volgende' button found — reached last page.
+2026-04-08 16:08:37,082 - INFO - Phase 1 complete. Collected 9 unique URLs.
+2026-04-08 16:08:37,082 - INFO - Phase 2: processing 9 documents
+2026-04-08 16:08:37,095 - INFO - [1/9] Processing PUC_638339_22
+2026-04-08 16:08:46,319 - INFO - Saved PUC_638339_22 | format=PDF | chars=33150 | title=Reactie NZa op dialoognota ouder worden 2020-2040
+2026-04-08 16:08:46,324 - INFO - [2/9] Processing PUC_3613_22
+2026-04-08 16:08:55,578 - INFO - Saved PUC_3613_22 | format=PDF | chars=83194 | title=Consultatiedocument bijlage bij Palliatieve zorg op maat
+Publicatiedatum: 22-06-2017
+2026-04-08 16:08:55,584 - INFO - [3/9] Processing PUC_12796_22
+2026-04-08 16:09:04,036 - INFO - Saved PUC_12796_22 | format=PDF | chars=42954 | title=Overzicht reacties externe consultatie geboortezorg
+Publicatiedatum: 18-11-2015
+2026-04-08 16:09:04,038 - INFO - [4/9] Processing PUC_3331_22
+2026-04-08 16:09:12,811 - INFO - Saved PUC_3331_22 | format=PDF | chars=35695 | title=Consultatiedocument Contracteerproces eerstelijnszorg
+Publicatiedatum: 06-08-2015
+2026-04-08 16:09:12,813 - INFO - [5/9] Processing PUC_3307_22
+2026-04-08 16:09:22,067 - INFO - Saved PUC_3307_22 | format=PDF | chars=69660 | title=Openbare Consultatieronde Risicoverkenning faillissementen zorgverzekeraars en ziekenhuizen
+Publicatiedatum: 25-06-2015
+2026-04-08 16:09:22,069 - INFO - [6/9] Processing PUC_3225_22
+2026-04-08 16:09:31,433 - INFO - Saved PUC_3225_22 | format=PDF | chars=126572 | title=Consultatiedocument Prestaties eerstelijns verblijf
+Publicatiedatum: 31-03-2015
+2026-04-08 16:09:31,436 - INFO - [7/9] Processing PUC_3221_22
+2026-04-08 16:09:40,943 - INFO - Saved PUC_3221_22 | format=PDF | chars=148975 | title=Consultatiedocument risicoverkenning faillissementen zorgverzekeraars en ziekenhuizen
+Publicatiedatum: 10-02-2015
+2026-04-08 16:09:40,946 - INFO - [8/9] Processing PUC_3210_22
+2026-04-08 16:09:51,089 - INFO - Saved PUC_3210_22 | format=PDF | chars=287494 | title=Consultatiedocument 3-segmentenmodel verpleging en verzorging in de Zvw incl rapport Gupta
+Publicatiedatum: 09-12-2014
+2026-04-08 16:09:51,091 - INFO - [9/9] Processing PUC_3068_22
+2026-04-08 16:09:59,836 - INFO - Saved PUC_3068_22 | format=PDF | chars=85309 | title=Consultatiedocument Overheveling langdurige GGZ naar Zvw
+Publicatiedatum: 06-05-2013
+2026-04-08 16:10:00,290 - INFO - Scraping finished. Documents — success: 9 | skipped: 0 | failed: 0
+2026-04-08 16:10:00,294 - INFO - Database totals — documents: 10
