@@ -9,8 +9,8 @@
 # ------------------
 # Phase 1 — URL collection:  navigate the paginated list, harvest every
 #            document link.
-# Phase 2 — Document processing:  visit each URL, extract text (HTML article
-#            or PDF fallback), chunk it for RAG, and persist to DuckDB.
+# Phase 2 — Document processing:  visit each URL, extract the full text
+#            (HTML article or PDF fallback), and persist to DuckDB.
 
 import logging
 import os
@@ -30,14 +30,12 @@ from src.config import (
     RETRY_BACKOFF,
 )
 from src.parser import (
-    chunk_text,
     existing_pdfs,
     html_to_text,
     pdf_to_text,
     wait_for_new_pdf,
 )
 from src.storage import (
-    count_chunks,
     count_documents,
     document_exists,
     get_connection,
@@ -191,7 +189,7 @@ def _extract_metadata(driver) -> dict:
 
 def process_document(driver, wait: WebDriverWait, con, url: str) -> bool:
     """
-    Visit *url*, extract and chunk the document text, and save to DuckDB.
+    Visit *url*, extract the full document text, and save to DuckDB.
     Returns True on success, False on failure.
     """
     puc_id = _puc_id_from_url(url)
@@ -251,20 +249,19 @@ def process_document(driver, wait: WebDriverWait, con, url: str) -> bool:
         logger.warning("No text extracted from %s", puc_id)
         return False
 
-    chunks = chunk_text(text)
     save_document(
         con,
         puc_id,
         url,
-        chunks,
+        text,
         title=meta["title"],
         doc_date=meta["doc_date"],
         doc_type=meta["doc_type"],
         source_format=source_format,
     )
     logger.info(
-        "Saved %s | format=%s | chunks=%d | title=%s",
-        puc_id, source_format, len(chunks), meta["title"],
+        "Saved %s | format=%s | chars=%d | title=%s",
+        puc_id, source_format, len(text), meta["title"],
     )
     return True
 
@@ -301,10 +298,7 @@ def main() -> None:
         "Scraping finished. Documents — success: %d | skipped: %d | failed: %d",
         success, skipped, failed,
     )
-    logger.info(
-        "Database totals — documents: %d | chunks: %d",
-        count_documents(con), count_chunks(con),
-    )
+    logger.info("Database totals — documents: %d", count_documents(con))
     con.close()
 
 

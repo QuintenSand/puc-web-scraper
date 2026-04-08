@@ -1,14 +1,9 @@
 # src/storage.py
-# DuckDB storage layer with an RAG-optimised schema.
+# DuckDB storage layer.
 #
-# Schema rationale for RAG
-# -------------------------
-# RAG retrievers work best when:
-#   1. Each row is a *chunk*, not a full document (better semantic granularity).
-#   2. Metadata (title, date, type) is stored alongside the chunk so that it
-#      can be injected into the LLM prompt as attribution context.
-#   3. A documents table keeps one row per source URL so we can cheaply check
-#      whether a document was already scraped without re-fetching it.
+# One table — documents — stores the full extracted text of each PUC document
+# alongside its metadata. Chunking for RAG happens downstream in a separate
+# pipeline, not here.
 
 import duckdb
 
@@ -23,28 +18,16 @@ def get_connection() -> duckdb.DuckDBPyConnection:
 
 
 def _create_schema(con: duckdb.DuckDBPyConnection) -> None:
-    # One row per source document — used as a cheap "seen" check.
     con.execute("""
         CREATE TABLE IF NOT EXISTS documents (
             puc_id        VARCHAR PRIMARY KEY,
             url           VARCHAR NOT NULL,
             title         VARCHAR,
             doc_date      DATE,
-            doc_type      VARCHAR,        -- 'regelgeving', 'beleidsregel', etc.
+            doc_type      VARCHAR,        -- e.g. 'Beleidsregel', 'Regelgeving'
             source_format VARCHAR,        -- 'HTML' | 'PDF'
+            content       TEXT,           -- full extracted text
             scraped_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
-    # One row per text chunk — what the RAG retriever actually searches.
-    con.execute("""
-        CREATE TABLE IF NOT EXISTS chunks (
-            chunk_id      VARCHAR PRIMARY KEY,   -- '{puc_id}__{chunk_index}'
-            puc_id        VARCHAR NOT NULL REFERENCES documents(puc_id),
-            chunk_index   INTEGER NOT NULL,
-            content       TEXT NOT NULL,
-            chunk_size    INTEGER,               -- character count, handy for debugging
-            created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
@@ -64,37 +47,19 @@ def save_document(
     con: duckdb.DuckDBPyConnection,
     puc_id: str,
     url: str,
-    chunks: list[str],
+    content: str,
     *,
     title: str | None = None,
     doc_date: str | None = None,   # ISO-8601 string, e.g. '2024-03-15'
     doc_type: str | None = None,
     source_format: str = "HTML",
 ) -> None:
-    """
-    Persist a document and all its text chunks in one transaction.
-    Existing entries for the same puc_id are replaced.
-    """
-    with con.cursor() as cur:
-        # Upsert document record
-        cur.execute("""
-            INSERT OR REPLACE INTO documents
-                (puc_id, url, title, doc_date, doc_type, source_format)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, [puc_id, url, title, doc_date, doc_type, source_format])
-
-        # Remove stale chunks (needed for OR REPLACE semantics on documents)
-        cur.execute("DELETE FROM chunks WHERE puc_id = ?", [puc_id])
-
-        # Insert new chunks
-        rows = [
-            (f"{puc_id}__{i}", puc_id, i, chunk, len(chunk))
-            for i, chunk in enumerate(chunks)
-        ]
-        cur.executemany("""
-            INSERT INTO chunks (chunk_id, puc_id, chunk_index, content, chunk_size)
-            VALUES (?, ?, ?, ?, ?)
-        """, rows)
+    """Persist a document. Existing entries for the same puc_id are replaced."""
+    con.execute("""
+        INSERT OR REPLACE INTO documents
+            (puc_id, url, title, doc_date, doc_type, source_format, content)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, [puc_id, url, title, doc_date, doc_type, source_format, content])
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +68,3 @@ def save_document(
 
 def count_documents(con: duckdb.DuckDBPyConnection) -> int:
     return con.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
-
-
-def count_chunks(con: duckdb.DuckDBPyConnection) -> int:
-    return con.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]

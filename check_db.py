@@ -10,15 +10,12 @@ con = duckdb.connect(DB_PATH, read_only=True)
 # ---------------------------------------------------------------------------
 # 1. Overview
 # ---------------------------------------------------------------------------
-n_docs   = con.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
-n_chunks = con.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
-avg_chunks = n_chunks / n_docs if n_docs else 0
+n_docs = con.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
 
 print("=" * 60)
 print("  PUC DATABASE OVERVIEW")
 print("=" * 60)
 print(f"  Documents : {n_docs}")
-print(f"  Chunks    : {n_chunks}  (avg {avg_chunks:.1f} per document)")
 
 # ---------------------------------------------------------------------------
 # 2. Breakdown by source format (HTML vs PDF)
@@ -48,24 +45,25 @@ for doc_type, n in rows:
     print(f"  {doc_type:40s}  {n}")
 
 # ---------------------------------------------------------------------------
-# 4. Chunk size distribution
+# 4. Content size distribution
 # ---------------------------------------------------------------------------
-print("\n--- Chunk size distribution ---")
+print("\n--- Content size distribution ---")
 row = con.execute("""
     SELECT
-        MIN(chunk_size)  AS min_chars,
-        MAX(chunk_size)  AS max_chars,
-        AVG(chunk_size)  AS avg_chars,
-        MEDIAN(chunk_size) AS median_chars
-    FROM chunks
+        MIN(LENGTH(content))    AS min_chars,
+        MAX(LENGTH(content))    AS max_chars,
+        AVG(LENGTH(content))    AS avg_chars,
+        MEDIAN(LENGTH(content)) AS median_chars
+    FROM documents
+    WHERE content IS NOT NULL
 """).fetchone()
 if row and row[0] is not None:
-    print(f"  Min    : {row[0]} chars")
-    print(f"  Max    : {row[1]} chars")
-    print(f"  Avg    : {row[2]:.0f} chars")
-    print(f"  Median : {row[3]:.0f} chars")
+    print(f"  Min    : {row[0]:,} chars")
+    print(f"  Max    : {row[1]:,} chars")
+    print(f"  Avg    : {row[2]:,.0f} chars")
+    print(f"  Median : {row[3]:,.0f} chars")
 else:
-    print("  (no chunks yet)")
+    print("  (no content yet)")
 
 # ---------------------------------------------------------------------------
 # 5. Sample documents
@@ -85,21 +83,21 @@ for puc_id, fmt, doc_type, title, scraped_at in rows:
     print(f"  Scraped : {scraped_at}")
 
 # ---------------------------------------------------------------------------
-# 6. Sample chunks for the most recent document
+# 6. Content preview for the most recent document
 # ---------------------------------------------------------------------------
 if rows:
     sample_id = rows[0][0]
-    print(f"\n--- First 2 chunks of '{sample_id}' ---")
-    chunks = con.execute("""
-        SELECT chunk_index, chunk_size, content
-        FROM chunks
+    print(f"\n--- Content preview for '{sample_id}' ---")
+    row = con.execute("""
+        SELECT LENGTH(content), content
+        FROM documents
         WHERE puc_id = ?
-        ORDER BY chunk_index
-        LIMIT 2
-    """, [sample_id]).fetchall()
-    for idx, size, content in chunks:
-        print(f"\n  [chunk {idx}]  {size} chars")
-        print(f"  {content[:300].replace(chr(10), ' ')}{'…' if size > 300 else ''}")
+    """, [sample_id]).fetchone()
+    if row:
+        total_chars, content = row
+        print(f"  Total : {total_chars:,} chars")
+        print(f"\n  First 500 chars:")
+        print(f"  {content[:500].replace(chr(10), ' ')}")
 
 print("\n" + "=" * 60)
 con.close()
