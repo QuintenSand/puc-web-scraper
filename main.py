@@ -29,6 +29,7 @@ from src.config import (
     MIN_ARTICLE_LENGTH,
     RETRY_BACKOFF,
 )
+from src.prompt import ScraperFilters, ask_filters, fetch_available_categories
 from src.parser import (
     existing_pdfs,
     html_to_text,
@@ -81,25 +82,39 @@ def with_retry(fn, *args, retries: int = MAX_RETRIES, backoff: float = RETRY_BAC
 # Phase 1 — URL collection
 # ---------------------------------------------------------------------------
 
-def collect_urls(driver, wait: WebDriverWait) -> list[str]:
+def collect_urls(driver, wait: WebDriverWait, filters: ScraperFilters) -> list[str]:
     """
-    Navigate the PUC NZa list (with 'Alle' + 'Geldig vandaag' filters applied)
-    and return every unique document URL found across all pages.
+    Navigate the PUC NZa list, apply the selected filters, and return every
+    unique document URL found across all pages.
     """
     logger.info("Phase 1: collecting document URLs from %s", BASE_URL)
     driver.get(BASE_URL)
 
-    # Apply "Alle" filter
+    # Always expand the full view first
     alle_btn = wait.until(
         EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Alle')]"))
     )
     alle_btn.click()
 
-    # Apply "Geldig vandaag" filter
-    geldig_btn = wait.until(
-        EC.element_to_be_clickable((By.XPATH, "//label[contains(., 'Geldig vandaag')]"))
-    )
-    geldig_btn.click()
+    # Validity filter
+    if filters.valid_only:
+        geldig_btn = wait.until(
+            EC.element_to_be_clickable((By.XPATH, "//label[contains(., 'Geldig vandaag')]"))
+        )
+        geldig_btn.click()
+        logger.info("Filter applied: Geldig vandaag")
+
+    # Category filters — click each selected category label
+    for category in filters.categories:
+        try:
+            cat_btn = wait.until(EC.element_to_be_clickable((
+                By.XPATH,
+                f"//a[normalize-space()='{category}'] | //label[normalize-space()='{category}']",
+            )))
+            cat_btn.click()
+            logger.info("Filter applied: category = %s", category)
+        except Exception:
+            logger.warning("Could not apply category filter '%s' — skipping.", category)
 
     all_urls: list[str] = []
     page = 1
@@ -187,10 +202,11 @@ def _extract_metadata(driver) -> dict:
     return meta
 
 
-def process_document(driver, wait: WebDriverWait, con, url: str) -> bool:
+def process_document(driver, wait: WebDriverWait, con, url: str, filters: ScraperFilters) -> bool:
     """
     Visit *url*, extract the full document text, and save to DuckDB.
     Returns True on success, False on failure.
+    Skips documents whose publication date falls outside filters.date_from / date_to.
     """
     puc_id = _puc_id_from_url(url)
 
@@ -202,6 +218,21 @@ def process_document(driver, wait: WebDriverWait, con, url: str) -> bool:
     time.sleep(2)   # brief pause; the site uses some JS rendering
 
     meta = _extract_metadata(driver)
+
+    # Date-range filter — skip early if the document is outside the window
+    if meta["doc_date"] and (filters.date_from or filters.date_to):
+        try:
+            from datetime import date as _date, datetime as _dt
+            doc_date = _dt.fromisoformat(str(meta["doc_date"])).date()
+            if filters.date_from and doc_date < filters.date_from:
+                logger.info("Skipping %s — date %s is before %s", puc_id, doc_date, filters.date_from)
+                return True
+            if filters.date_to and doc_date > filters.date_to:
+                logger.info("Skipping %s — date %s is after %s", puc_id, doc_date, filters.date_to)
+                return True
+        except (ValueError, TypeError):
+            pass  # Unparseable date — proceed and save anyway
+
     source_format = "HTML"
     text = ""
 
@@ -274,8 +305,12 @@ def main() -> None:
     con = get_connection()
 
     with get_driver() as (driver, wait):
-        # Phase 1 — collect URLs
-        urls = collect_urls(driver, wait)
+        # Pre-flight — fetch live filter options and ask the user
+        available_categories = fetch_available_categories(driver, wait)
+        filters = ask_filters(available_categories)
+
+        # Phase 1 — collect URLs matching the selected filters
+        urls = collect_urls(driver, wait, filters)
 
         # Phase 2 — process documents
         logger.info("Phase 2: processing %d documents", len(urls))
@@ -288,7 +323,7 @@ def main() -> None:
                 continue
 
             logger.info("[%d/%d] Processing %s", i, len(urls), puc_id)
-            ok = with_retry(process_document, driver, wait, con, url)
+            ok = with_retry(process_document, driver, wait, con, url, filters)
             if ok:
                 success += 1
             else:
