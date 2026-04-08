@@ -404,3 +404,31 @@ Stacktrace:
 2026-04-01 19:00:39,219 - INFO - Reached end of list. Total URLs: 6640
 2026-04-01 19:00:43,848 - INFO - Reached end of list. Total URLs: 6680
 2026-04-01 19:00:48,468 - INFO - Reached end of list. Total URLs: 6720
+2026-04-08 15:26:42,277 - INFO - Phase 1: collecting document URLs from https://puc.overheid.nl/nza/
+2026-04-08 15:26:47,268 - INFO - Crawling list page 1 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/1/)
+2026-04-08 15:26:47,306 - INFO -   Found 40 links on this page
+2026-04-08 15:26:51,873 - INFO - Crawling list page 2 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/2/thm/NZA000/)
+2026-04-08 15:26:51,897 - INFO -   Found 40 links on this page
+2026-04-08 15:26:56,379 - INFO - Crawling list page 3 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/3/thm/NZA000/)
+2026-04-08 15:26:56,411 - INFO -   Found 40 links on this page
+2026-04-08 15:27:01,035 - INFO - Crawling list page 4 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/4/thm/NZA000/)
+2026-04-08 15:27:01,063 - INFO -   Found 40 links on this page
+2026-04-08 15:27:05,432 - INFO - Crawling list page 5 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/5/thm/NZA000/)
+2026-04-08 15:27:05,453 - INFO -   Found 40 links on this page
+2026-04-08 15:27:10,027 - INFO - Crawling list page 6 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/6/thm/NZA000/)
+2026-04-08 15:27:10,053 - INFO -   Found 40 links on this page
+2026-04-08 15:27:14,448 - INFO - Crawling list page 7 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/7/thm/NZA000/)
+2026-04-08 15:27:14,474 - INFO -   Found 40 links on this page
+2026-04-08 15:27:18,940 - INFO - Crawling list page 8 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/8/thm/NZA000/)
+2026-04-08 15:27:18,967 - INFO -   Found 40 links on this page
+2026-04-08 15:27:23,607 - INFO - Crawling list page 9 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/9/thm/NZA000/)
+2026-04-08 15:27:23,631 - INFO -   Found 40 links on this page
+2026-04-08 15:27:28,341 - INFO - Crawling list page 10 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/10/thm/NZA000/)
+2026-04-08 15:27:28,370 - INFO -   Found 40 links on this page
+2026-04-08 15:27:32,959 - INFO - Crawling list page 11 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/11/thm/NZA000/)
+2026-04-08 15:27:32,989 - INFO -   Found 40 links on this page
+2026-04-08 15:27:37,382 - INFO - Crawling list page 12 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/08-04-2026/p/12/thm/NZA000/)
+2026-04-08 15:27:37,407 - INFO -   Found 40 links on this page
+2026-04-08 15:27:41,596 - WARNING - Retrying (Retry(total=2, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ConnectionResetError(54, 'Connection reset by peer')': /session/f364b013e28f38a59108522483467743
+2026-04-08 15:27:41,599 - WARNING - Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError("HTTPConnection(host='localhost', port=53792): Failed to establish a new connection: [Errno 61] Connection refused")': /session/f364b013e28f38a59108522483467743
+2026-04-08 15:27:41,602 - WARNING - Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError("HTTPConnection(host='localhost', port=53792): Failed to establish a new connection: [Errno 61] Connection refused")': /session/f364b013e28f38a59108522483467743
