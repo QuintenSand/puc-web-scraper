@@ -11,6 +11,7 @@
 #   3. Clear error with instructions    — if both above fail
 
 import os
+import shutil
 from contextlib import contextmanager
 
 from selenium import webdriver
@@ -63,11 +64,15 @@ def _get_service() -> Service:
     Tries webdriver-manager first (handles version matching and local caching).
     If that fails, raises a clear error with manual setup instructions.
     """
-    # Manual path — highest priority, always works offline
+    # 1. Manual path in config.py — highest priority, always works offline
     if CHROME_DRIVER_PATH:
         return Service(executable_path=CHROME_DRIVER_PATH)
 
-    # webdriver-manager — downloads and caches the right ChromeDriver version
+    # 2. Already on the system PATH (e.g. installed by IT or a package manager)
+    if shutil.which("chromedriver"):
+        return Service()
+
+    # 3. webdriver-manager — downloads and caches the right ChromeDriver version
     try:
         from webdriver_manager.chrome import ChromeDriverManager
         return Service(ChromeDriverManager().install())
