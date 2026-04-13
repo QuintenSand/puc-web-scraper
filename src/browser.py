@@ -1,15 +1,24 @@
 # src/browser.py
-# Selenium browser factory.
-# Use as a context manager so the driver is always closed, even on error:
+# Chrome browser — only used for pages that require a PDF download.
+# For HTML document pages and URL collection, see src/fetcher.py.
 #
-#   with get_driver() as (driver, wait):
+# Use LazyBrowser so Chrome is only started if the current run actually
+# encounters a document that needs a PDF:
+#
+#   browser = LazyBrowser()
+#   try:
+#       driver, wait = browser.get()   # starts Chrome on first call
 #       driver.get("https://...")
+#   finally:
+#       browser.close()
 #
 # ChromeDriver resolution order:
-#   1. CHROME_DRIVER_PATH in config.py  — use this on offline / firewalled machines
-#   2. webdriver-manager                — downloads & caches the correct driver version
-#   3. Clear error with instructions    — if both above fail
+#   1. CHROME_DRIVER_PATH in config.py  — set this on firewalled machines
+#   2. chromedriver already on system PATH
+#   3. webdriver-manager               — downloads & caches the right version
+#   4. RuntimeError with setup guide   — if all above fail
 
+import logging
 import os
 import shutil
 from contextlib import contextmanager
@@ -21,12 +30,14 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from .config import CHROME_DRIVER_PATH, DOWNLOAD_DIR, PAGE_LOAD_TIMEOUT
 
+logger = logging.getLogger(__name__)
+
 _MANUAL_SETUP_GUIDE = """
 ChromeDriver could not be located automatically.
 This usually means the machine cannot reach the ChromeDriver download servers
 (e.g. due to a firewall or proxy).
 
-To fix this, do the following steps:
+To fix this, follow these steps:
 
   1. Check your Chrome version:
      Open Chrome → go to chrome://version → note the version number (e.g. 136.0.7103.93)
@@ -34,7 +45,7 @@ To fix this, do the following steps:
   2. Download the matching ChromeDriver for Windows:
      https://googlechromelabs.github.io/chrome-for-testing/
      Pick the version that matches your Chrome, download 'chromedriver-win64.zip',
-     and extract chromedriver.exe to a folder (e.g. C:\\tools\\chromedriver.exe).
+     and extract chromedriver.exe somewhere (e.g. C:\\tools\\chromedriver.exe).
 
   3. Set CHROME_DRIVER_PATH in src/config.py:
      CHROME_DRIVER_PATH = r"C:\\tools\\chromedriver.exe"
@@ -60,19 +71,14 @@ def _build_options(download_dir: str) -> Options:
 def _get_service() -> Service:
     """
     Return a configured ChromeDriver Service.
-
-    Tries webdriver-manager first (handles version matching and local caching).
-    If that fails, raises a clear error with manual setup instructions.
+    Tries multiple resolution strategies before raising a clear error.
     """
-    # 1. Manual path in config.py — highest priority, always works offline
     if CHROME_DRIVER_PATH:
         return Service(executable_path=CHROME_DRIVER_PATH)
 
-    # 2. Already on the system PATH (e.g. installed by IT or a package manager)
     if shutil.which("chromedriver"):
         return Service()
 
-    # 3. webdriver-manager — downloads and caches the right ChromeDriver version
     try:
         from webdriver_manager.chrome import ChromeDriverManager
         return Service(ChromeDriverManager().install())
@@ -80,25 +86,38 @@ def _get_service() -> Service:
         raise RuntimeError(_MANUAL_SETUP_GUIDE) from e
 
 
-@contextmanager
-def get_driver(headless: bool = False):
-    """
-    Yield a configured (driver, wait) tuple and guarantee driver.quit() on exit.
+# ---------------------------------------------------------------------------
+# LazyBrowser — starts Chrome only when first needed
+# ---------------------------------------------------------------------------
 
-    Example
-    -------
-    with get_driver() as (driver, wait):
-        driver.get("https://example.com")
+class LazyBrowser:
     """
-    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-    opts = _build_options(DOWNLOAD_DIR)
-    if headless:
-        opts.add_argument("--headless=new")
+    Wraps a Chrome WebDriver that is only started on the first call to .get().
+    This means runs where every document is HTML never open Chrome at all.
+    """
 
-    service = _get_service()
-    driver = webdriver.Chrome(service=service, options=opts)
-    wait = WebDriverWait(driver, PAGE_LOAD_TIMEOUT)
-    try:
-        yield driver, wait
-    finally:
-        driver.quit()
+    def __init__(self) -> None:
+        self._driver: webdriver.Chrome | None = None
+        self._wait: WebDriverWait | None = None
+
+    @property
+    def started(self) -> bool:
+        return self._driver is not None
+
+    def get(self) -> tuple[webdriver.Chrome, WebDriverWait]:
+        """Return (driver, wait), starting Chrome if this is the first call."""
+        if self._driver is None:
+            logger.info("Starting Chrome for PDF downloads…")
+            os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+            opts = _build_options(DOWNLOAD_DIR)
+            service = _get_service()
+            self._driver = webdriver.Chrome(service=service, options=opts)
+            self._wait = WebDriverWait(self._driver, PAGE_LOAD_TIMEOUT)
+        return self._driver, self._wait
+
+    def close(self) -> None:
+        """Quit Chrome if it was started."""
+        if self._driver is not None:
+            self._driver.quit()
+            self._driver = None
+            self._wait = None
