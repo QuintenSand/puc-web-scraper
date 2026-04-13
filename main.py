@@ -47,7 +47,7 @@ from src.parser import (
     pdf_to_text,
     wait_for_new_pdf,
 )
-from src.prompt import ScraperFilters, ask_filters
+from src.prompt import ScraperFilters, ask_clear_db, ask_filters
 from src.storage import (
     count_documents,
     document_exists,
@@ -73,6 +73,7 @@ logger = logging.getLogger(__name__)
 # Retry helper
 # ---------------------------------------------------------------------------
 
+
 def with_retry(fn, *args, retries: int = MAX_RETRIES, backoff: float = RETRY_BACKOFF, **kwargs):
     for attempt in range(1, retries + 1):
         try:
@@ -82,13 +83,16 @@ def with_retry(fn, *args, retries: int = MAX_RETRIES, backoff: float = RETRY_BAC
                 logger.error("All %d attempts failed for %s: %s", retries, fn.__name__, exc)
                 return None
             wait = backoff * (2 ** (attempt - 1))
-            logger.warning("Attempt %d/%d failed (%s). Retrying in %.1fs…", attempt, retries, exc, wait)
+            logger.warning(
+                "Attempt %d/%d failed (%s). Retrying in %.1fs…", attempt, retries, exc, wait
+            )
             time.sleep(wait)
 
 
 # ---------------------------------------------------------------------------
 # Phase 1 — URL collection  (httpx, no browser)
 # ---------------------------------------------------------------------------
+
 
 def collect_urls(client, filters: ScraperFilters) -> list[str]:
     """
@@ -134,6 +138,7 @@ def collect_urls(client, filters: ScraperFilters) -> list[str]:
 # ---------------------------------------------------------------------------
 # Phase 2 — Document processing  (httpx for HTML, browser only for PDF)
 # ---------------------------------------------------------------------------
+
 
 def _puc_id_from_url(url: str) -> str:
     parts = url.rstrip("/").split("/")
@@ -184,7 +189,7 @@ def process_document(client, browser: LazyBrowser, con, url: str, filters: Scrap
     meta = extract_metadata(soup)
 
     if not _passes_filters(meta, filters, puc_id):
-        return True   # skipped, not a failure
+        return True  # skipped, not a failure
 
     # --- Option A: HTML article (no browser needed) ---
     text = extract_article_text(soup)
@@ -234,9 +239,9 @@ def process_document(client, browser: LazyBrowser, con, url: str, filters: Scrap
         time.sleep(2)
 
         try:
-            pdf_btn = wait.until(EC.element_to_be_clickable(
-                (By.XPATH, "//a[contains(., 'Maak een PDF')]")
-            ))
+            pdf_btn = wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Maak een PDF')]"))
+            )
             before = existing_pdfs()
             pdf_btn.click()
 
@@ -266,14 +271,22 @@ def process_document(client, browser: LazyBrowser, con, url: str, filters: Scrap
         return False
 
     save_document(
-        con, puc_id, url, text,
+        con,
+        puc_id,
+        url,
+        text,
         title=meta["title"],
         doc_date=meta["doc_date"],
         doc_type=meta["doc_type"],
         source_format=source_format,
     )
-    logger.info("Saved %s | format=%s | chars=%d | title=%s",
-                puc_id, source_format, len(text), meta["title"])
+    logger.info(
+        "Saved %s | format=%s | chars=%d | title=%s",
+        puc_id,
+        source_format,
+        len(text),
+        meta["title"],
+    )
     return True
 
 
@@ -281,12 +294,17 @@ def process_document(client, browser: LazyBrowser, con, url: str, filters: Scrap
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     con = get_connection()
     browser = LazyBrowser()
 
     with get_client() as client:
-        # Pre-flight — fetch filter options and ask the user
+        # Pre-flight — optionally clear the DB, then ask filter questions
+        if ask_clear_db(count_documents(con)):
+            con.execute("DELETE FROM documents")
+            logger.info("Database cleared.")
+
         category_options = fetch_category_options(client)
         filters = ask_filters(category_options)
 
@@ -315,7 +333,9 @@ def main() -> None:
 
     logger.info(
         "Scraping finished. success=%d | skipped=%d | failed=%d",
-        success, skipped, failed,
+        success,
+        skipped,
+        failed,
     )
     logger.info("Database totals — documents: %d", count_documents(con))
     con.close()

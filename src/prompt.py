@@ -16,20 +16,22 @@ _DIVIDER = "-" * 50
 # Filter dataclass — passed around the rest of the program
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ScraperFilters:
-    valid_only: bool = True           # True  → include gdlv/gd date in URL
+    valid_only: bool = True  # True  → include gdlv/gd date in URL
     category_codes: list[str] = field(default_factory=list)
     #   empty list → use NZA000 (all categories)
     #   non-empty  → one URL-collection pass per code
-    date_from: date | None = None     # inclusive lower bound on doc_date
-    date_to:   date | None = None     # inclusive upper bound on doc_date
-    keyword:   str  | None = None     # matched against title and doc_type
+    date_from: date | None = None  # inclusive lower bound on doc_date
+    date_to: date | None = None  # inclusive upper bound on doc_date
+    keyword: str | None = None  # matched against title and doc_type
 
 
 # ---------------------------------------------------------------------------
 # Terminal UI helpers
 # ---------------------------------------------------------------------------
+
 
 def _print_header(text: str) -> None:
     print(f"\n{_DIVIDER}")
@@ -73,8 +75,45 @@ def _ask_date(prompt: str) -> date | None:
 
 
 # ---------------------------------------------------------------------------
+# Database prompt
+# ---------------------------------------------------------------------------
+
+
+def ask_clear_db(current_count: int) -> bool:
+    """
+    Ask whether to wipe the database before scraping.
+
+    Only shown when the database already contains documents; a fresh database
+    skips the question automatically.  Returns True if the user wants to clear.
+    """
+    if current_count == 0:
+        return False
+
+    _print_header(f"Database  ({current_count:,} documents already stored)")
+    print("  [1] Keep existing documents and skip already-scraped URLs")
+    print("  [2] Clear the database and start fresh")
+
+    while True:
+        raw = input("\n  Select [1/2] (default: 1): ").strip()
+        if raw in ("", "1"):
+            return False
+        if raw == "2":
+            confirm = (
+                input(
+                    f"  This will permanently delete all {current_count:,} documents. "
+                    "Type 'yes' to confirm: "
+                )
+                .strip()
+                .lower()
+            )
+            return confirm == "yes"
+        print("  Invalid input, please try again.")
+
+
+# ---------------------------------------------------------------------------
 # Main prompt
 # ---------------------------------------------------------------------------
+
 
 def ask_filters(category_options: list[tuple[str, str]]) -> ScraperFilters:
     """
@@ -101,7 +140,7 @@ def ask_filters(category_options: list[tuple[str, str]]) -> ScraperFilters:
     if category_options:
         _print_header("Document category")
         names = [name for name, _ in category_options]
-        menu  = ["All categories"] + names
+        menu = ["All categories"] + names
         print("  To pick one:      type a single number,   e.g.  26")
         print("  To pick multiple: type numbers separated by spaces or commas,")
         print("                    e.g.  26 32   or   26,32")
@@ -118,7 +157,7 @@ def ask_filters(category_options: list[tuple[str, str]]) -> ScraperFilters:
     # --- Date range ---
     _print_header("Date range  (leave blank to skip)")
     date_from = _ask_date("  Published from (YYYY-MM-DD):")
-    date_to   = _ask_date("  Published to   (YYYY-MM-DD):")
+    date_to = _ask_date("  Published to   (YYYY-MM-DD):")
 
     # --- Keyword ---
     _print_header("Keyword filter  (leave blank to scrape everything)")
@@ -144,8 +183,7 @@ def _print_summary(f: ScraperFilters, category_options: list[tuple[str, str]]) -
     # Map codes back to names for display
     code_to_name = {code: name for name, code in category_options}
     cat_display = (
-        ", ".join(code_to_name.get(c, c) for c in f.category_codes)
-        if f.category_codes else "All"
+        ", ".join(code_to_name.get(c, c) for c in f.category_codes) if f.category_codes else "All"
     )
     print("\n" + "=" * 50)
     print("  SCRAPE SUMMARY")
@@ -153,5 +191,5 @@ def _print_summary(f: ScraperFilters, category_options: list[tuple[str, str]]) -
     print(f"  Validity  : {'Geldig vandaag' if f.valid_only else 'Alle'}")
     print(f"  Categories: {cat_display}")
     print(f"  Date from : {f.date_from or '—'}")
-    print(f"  Date to   : {f.date_to   or '—'}")
-    print(f"  Keyword   : {f.keyword   or '—'}")
+    print(f"  Date to   : {f.date_to or '—'}")
+    print(f"  Keyword   : {f.keyword or '—'}")
