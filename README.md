@@ -4,7 +4,7 @@ A two-phase Selenium scraper for the [PUC Overheid (NZA) portal](https://puc.ove
 
 ## Features
 
-- **Interactive filter prompts** — before scraping starts, the script fetches the live filter options from the site and asks what you want to scrape: validity status, document categories, and an optional date range.
+- **Interactive filter prompts** — before scraping starts, the script fetches the live filter options from the site and asks what you want to scrape: validity status, document categories, an optional date range, and an optional keyword.
 - **Two-phase execution** — collects all matching document URLs first, then processes them. Keeps crawling and extraction separate and resumable.
 - **Dual extraction** — prefers the HTML article body; automatically falls back to downloading and parsing the PDF if the article is too short or absent.
 - **Enriched metadata** — stores title, publication date, and document type alongside the full text.
@@ -74,6 +74,23 @@ Select one or more [default: 1 = all]: 2 3
   Date from : 2024-01-01
   Date to   : —
 
+--------------------------------------------------
+  Keyword filter  (leave blank to scrape everything)
+--------------------------------------------------
+  Matched against the document title and type.
+  Only documents containing the keyword are saved.
+
+  Keyword: tarieven
+
+==================================================
+  SCRAPE SUMMARY
+==================================================
+  Validity  : Geldig vandaag
+  Categories: Jeugdzorg, GGZ
+  Date from : 2024-01-01
+  Date to   : —
+  Keyword   : tarieven
+
 Press Enter to start scraping, or Ctrl-C to abort …
 ```
 
@@ -88,7 +105,7 @@ Each URL is visited and the text is extracted in one of two ways:
 - **HTML** — if the page contains an `<article>` element with sufficient text, it is converted to plain text directly.
 - **PDF** — if not, the scraper clicks the "Maak een PDF" or "PDF Openen" button, waits for the file to download, extracts the text with PyMuPDF, and deletes the local file afterwards.
 
-Documents outside the selected date range are skipped. Documents already in the database are skipped automatically, making every run resumable.
+Documents that don't contain the keyword in their title or document type are skipped before any content is downloaded. Documents outside the selected date range are also skipped. Documents already in the database are skipped automatically, making every run resumable.
 
 ## Database schema
 

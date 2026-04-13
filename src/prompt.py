@@ -32,6 +32,8 @@ class ScraperFilters:
     #   non-empty  → click each named category filter on the site
     date_from: date | None = None    # inclusive lower bound on doc_date
     date_to:   date | None = None    # inclusive upper bound on doc_date
+    keyword:   str | None = None     # matched against title and doc_type
+    #   None → no keyword filter
 
 
 # ---------------------------------------------------------------------------
@@ -173,12 +175,20 @@ def ask_filters(available_categories: list[str]) -> ScraperFilters:
     date_from = _ask_date("  Published from (YYYY-MM-DD):")
     date_to   = _ask_date("  Published to   (YYYY-MM-DD):")
 
+    # --- Keyword ---
+    _print_header("Keyword filter  (leave blank to scrape everything)")
+    print("  Matched against the document title and type.")
+    print("  Only documents containing the keyword are saved.")
+    keyword_raw = input("\n  Keyword: ").strip()
+    keyword = keyword_raw if keyword_raw else None
+
     # --- Confirmation ---
     filters = ScraperFilters(
         valid_only=valid_only,
         categories=selected_categories,
         date_from=date_from,
         date_to=date_to,
+        keyword=keyword,
     )
     _print_summary(filters)
 
@@ -195,3 +205,4 @@ def _print_summary(f: ScraperFilters) -> None:
     print(f"  Categories: {cats}")
     print(f"  Date from : {f.date_from or '—'}")
     print(f"  Date to   : {f.date_to   or '—'}")
+    print(f"  Keyword   : {f.keyword   or '—'}")

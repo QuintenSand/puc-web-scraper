@@ -219,6 +219,15 @@ def process_document(driver, wait: WebDriverWait, con, url: str, filters: Scrape
 
     meta = _extract_metadata(driver)
 
+    # Keyword filter — skip early if title and doc_type don't contain the keyword
+    if filters.keyword:
+        keyword_lower = filters.keyword.lower()
+        title_match   = keyword_lower in (meta["title"]    or "").lower()
+        type_match    = keyword_lower in (meta["doc_type"] or "").lower()
+        if not title_match and not type_match:
+            logger.info("Skipping %s — keyword '%s' not found in title or type", puc_id, filters.keyword)
+            return True
+
     # Date-range filter — skip early if the document is outside the window
     if meta["doc_date"] and (filters.date_from or filters.date_to):
         try:
