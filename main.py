@@ -191,10 +191,30 @@ def process_document(client, browser: LazyBrowser, con, url: str, filters: Scrap
     source_format = "HTML"
 
     if not text:
-        # --- Option B: direct PDF link in the page (httpx, no browser) ---
-        # Many categories (e.g. Jeugdzorg) only offer a PDF — the link is
-        # right there in the HTML so we can download it without Selenium.
+        # --- Option B: direct PDF (httpx, no browser) ---
+        # Many categories (e.g. Jeugdzorg) are inherently PDF documents.
+        # We try to get the file without Selenium via two sub-strategies:
+        #
+        # B1 — scan the page HTML for a real PDF URL (link, data-attr, script)
+        # B2 — probe predictable URL variants (e.g. {doc_url}pdf/)
+
         pdf_url = extract_pdf_url(soup)
+
+        if not pdf_url:
+            # B2: some PUC docs serve their PDF at the document URL + /pdf/
+            for candidate in (
+                url.rstrip("/") + "/pdf/",
+                url.rstrip("/") + "/download/",
+            ):
+                try:
+                    head = client.head(candidate)
+                    ct = head.headers.get("content-type", "")
+                    if head.status_code == 200 and "pdf" in ct.lower():
+                        pdf_url = candidate
+                        break
+                except Exception:
+                    pass
+
         if pdf_url:
             logger.info("Downloading PDF directly: %s", pdf_url)
             try:

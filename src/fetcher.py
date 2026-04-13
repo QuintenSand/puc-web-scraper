@@ -163,29 +163,60 @@ def extract_pdf_url(soup: BeautifulSoup) -> str | None:
     Return the direct URL of a PDF embedded in or linked from a document page.
 
     Some PUC documents (e.g. all Jeugdzorg pages) are inherently PDFs — the
-    page offers only a download link rather than an HTML article body.  We scan
-    for these links so we can download the file with httpx, avoiding Selenium.
+    page offers only a download link rather than an HTML article body.  We try
+    three passes to find the URL so we can download via httpx, avoiding Selenium.
 
-    Patterns found on the site:
-      • <a href="…/…">PDF Openen</a>  — direct open/download button
-      • <a href="….pdf">…</a>          — any anchor whose href ends in .pdf
+    Pass 1 — <a href="…"> links:
+      • href ends in .pdf
+      • link text contains "PDF Openen" or similar
+
+    Pass 2 — data-* attributes:
+      • JS buttons sometimes store the real URL in a data-href / data-url / …
+        attribute even though the visible href is '#'
+
+    Pass 3 — inline <script> tags:
+      • PDF URL referenced as a JS string literal
     """
+    _BASE = "https://puc.overheid.nl"
+
+    def _make_absolute(href: str) -> str | None:
+        if href.startswith("/"):
+            return _BASE + href
+        if href.startswith("http"):
+            return href
+        return None
+
+    # Pass 1 — navigable <a> elements
     for a in soup.find_all("a", href=True):
         href: str = a["href"]
-
-        # Skip non-navigable hrefs (fragments, JavaScript, empty)
         if not href or href.startswith("#") or href.lower().startswith("javascript"):
             continue
-
         text = a.get_text(strip=True).lower()
-        is_pdf_href = href.lower().endswith(".pdf")
-        is_pdf_text = "pdf openen" in text or ("pdf" in text and "download" in text)
+        if href.lower().endswith(".pdf") or "pdf openen" in text or ("pdf" in text and "download" in text):
+            result = _make_absolute(href)
+            if result:
+                return result
 
-        if is_pdf_href or is_pdf_text:
-            if href.startswith("/"):
-                return "https://puc.overheid.nl" + href
-            if href.startswith("http"):
-                return href
+    # Pass 2 — data-* attributes on any element
+    for el in soup.find_all(True):
+        for attr, val in el.attrs.items():
+            if not isinstance(val, str) or not attr.startswith("data-"):
+                continue
+            if val.lower().endswith(".pdf") or "/pdf/" in val.lower():
+                result = _make_absolute(val)
+                if result:
+                    return result
+
+    # Pass 3 — PDF URL strings inside <script> tags
+    _pdf_re = re.compile(r'["\']([^"\']*\.pdf[^"\']*)["\']')
+    for script in soup.find_all("script"):
+        src = script.get_text()
+        if not src:
+            continue
+        for match in _pdf_re.findall(src):
+            result = _make_absolute(match)
+            if result:
+                return result
 
     return None
 

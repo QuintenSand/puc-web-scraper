@@ -20,6 +20,7 @@
 
 import logging
 import os
+import platform
 import shutil
 from contextlib import contextmanager
 
@@ -54,10 +55,32 @@ Then run the script again.
 """
 
 
+_CHROME_BINARIES = {
+    "Darwin": [
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    ],
+    "Linux": [
+        "/usr/bin/google-chrome",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/chromium",
+    ],
+}
+
+
 def _build_options(download_dir: str) -> Options:
     opts = Options()
     opts.add_argument("--disable-notifications")
     opts.add_argument("--disable-infobars")
+
+    # Explicitly set the Chrome binary if it can't be found automatically.
+    # This matters on macOS where the default PATH lookup often fails.
+    system = platform.system()
+    for binary in _CHROME_BINARIES.get(system, []):
+        if os.path.exists(binary):
+            opts.binary_location = binary
+            break
+
     prefs = {
         "download.default_directory": download_dir,
         "plugins.always_open_pdf_externally": True,
