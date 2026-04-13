@@ -6,6 +6,7 @@
 # Chrome is only started if a document requires a PDF download (see browser.py).
 
 import logging
+import re
 import time
 
 import httpx
@@ -114,7 +115,11 @@ def fetch_category_options(client: httpx.Client) -> list[tuple[str, str]]:
         except (ValueError, IndexError):
             continue
 
-        name = a.get_text(strip=True)
+        # Strip trailing document-count digits that the site appends inside
+        # the link text (e.g. "Acute zorg50" → "Acute zorg")
+        raw_name = a.get_text(strip=True)
+        name = re.sub(r'\d+$', '', raw_name).strip()
+
         if not name or not code or code in seen or code == "NZA000":
             continue
         seen.add(code)

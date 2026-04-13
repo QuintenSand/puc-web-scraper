@@ -102,9 +102,11 @@ def ask_filters(category_options: list[tuple[str, str]]) -> ScraperFilters:
         _print_header("Document category")
         names = [name for name, _ in category_options]
         menu  = ["All categories"] + names
-        print("  You can select multiple categories separated by spaces or commas.")
+        print("  To pick one:      type a single number,   e.g.  26")
+        print("  To pick multiple: type numbers separated by spaces or commas,")
+        print("                    e.g.  26 32   or   26,32")
         indices = _ask_choice(
-            "Select one or more [default: 1 = all]:",
+            "Select [default: 1 = all]:",
             menu,
             allow_multiple=True,
         )
