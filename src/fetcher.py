@@ -197,7 +197,15 @@ def extract_pdf_url(soup: BeautifulSoup) -> str | None:
             if result:
                 return result
 
-    # Pass 2 — data-* attributes on any element
+    # Pass 2a — <object data="…"> and <embed src="…"> (inline PDF viewers)
+    for tag in soup.find_all(["object", "embed"]):
+        val = tag.get("data") or tag.get("src") or ""
+        if "pdf" in val.lower():
+            result = _make_absolute(val)
+            if result:
+                return result
+
+    # Pass 2b — data-* attributes on any element
     for el in soup.find_all(True):
         for attr, val in el.attrs.items():
             if not isinstance(val, str) or not attr.startswith("data-"):
