@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+
+# Scraper output
+puc_data.db
+scraper_debug.log
+downloads/
+
+# macOS
+.DS_Store
