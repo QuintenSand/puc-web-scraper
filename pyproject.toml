@@ -17,5 +17,14 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "pre-commit>=4.0.0",
     "ruff>=0.15.8",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]   # pycodestyle errors, pyflakes, warnings, isort
+ignore = ["E501"]                # line-too-long — enforced by the formatter instead
