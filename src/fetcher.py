@@ -158,6 +158,33 @@ def extract_metadata(soup: BeautifulSoup) -> dict:
     return meta
 
 
+def extract_pdf_url(soup: BeautifulSoup) -> str | None:
+    """
+    Return the direct URL of a PDF embedded in or linked from a document page.
+
+    Some PUC documents (e.g. all Jeugdzorg pages) are inherently PDFs — the
+    page offers only a download link rather than an HTML article body.  We scan
+    for these links so we can download the file with httpx, avoiding Selenium.
+
+    Patterns found on the site:
+      • <a href="…/…">PDF Openen</a>  — direct open/download button
+      • <a href="….pdf">…</a>          — any anchor whose href ends in .pdf
+    """
+    for a in soup.find_all("a", href=True):
+        href: str = a["href"]
+        text = a.get_text(strip=True).lower()
+
+        is_pdf_href = href.lower().endswith(".pdf")
+        is_pdf_text = "pdf openen" in text or ("pdf" in text and "download" in text)
+
+        if is_pdf_href or is_pdf_text:
+            if href.startswith("/"):
+                return "https://puc.overheid.nl" + href
+            return href  # already absolute
+
+    return None
+
+
 def extract_article_text(soup: BeautifulSoup) -> str | None:
     """
     Return the article body as plain text.

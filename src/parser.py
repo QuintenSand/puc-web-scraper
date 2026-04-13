@@ -31,6 +31,23 @@ def html_to_text(html: str) -> str:
 # PDF → plain text
 # ---------------------------------------------------------------------------
 
+def pdf_bytes_to_text(data: bytes) -> str:
+    """Extract text from raw PDF bytes (e.g. from an httpx download)."""
+    try:
+        doc = fitz.open(stream=data, filetype="pdf")
+        pages: list[str] = []
+        for page in doc:
+            text = page.get_text("text").strip()
+            if not text:
+                blocks = page.get_text("blocks")
+                text = "\n".join(b[4] for b in blocks if b[4].strip())
+            pages.append(text)
+        return "\n\n".join(pages)
+    except Exception:
+        logger.exception("PyMuPDF failed on PDF bytes")
+        return ""
+
+
 def pdf_to_text(pdf_path: str) -> str:
     """
     Extract text from a PDF using PyMuPDF.

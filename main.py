@@ -36,12 +36,14 @@ from src.fetcher import (
     extract_article_text,
     extract_doc_links,
     extract_metadata,
+    extract_pdf_url,
     fetch_category_options,
     fetch_soup,
     get_client,
 )
 from src.parser import (
     existing_pdfs,
+    pdf_bytes_to_text,
     pdf_to_text,
     wait_for_new_pdf,
 )
@@ -188,18 +190,33 @@ def process_document(client, browser: LazyBrowser, con, url: str, filters: Scrap
     text = extract_article_text(soup)
     source_format = "HTML"
 
-    # --- Option B: PDF download (browser started lazily) ---
     if not text:
+        # --- Option B: direct PDF link in the page (httpx, no browser) ---
+        # Many categories (e.g. Jeugdzorg) only offer a PDF — the link is
+        # right there in the HTML so we can download it without Selenium.
+        pdf_url = extract_pdf_url(soup)
+        if pdf_url:
+            logger.info("Downloading PDF directly: %s", pdf_url)
+            try:
+                resp = client.get(pdf_url)
+                resp.raise_for_status()
+                text = pdf_bytes_to_text(resp.content)
+                source_format = "PDF"
+            except Exception:
+                logger.exception("Direct PDF download failed for %s", puc_id)
+
+    if not text:
+        # --- Option C: generated PDF via button click (browser started lazily) ---
+        # Used when the page has no article body and no direct PDF link, but
+        # offers a 'Maak een PDF' button that generates the PDF on the fly.
         driver, wait = browser.get()
         driver.get(url)
         time.sleep(2)
 
         try:
-            pdf_btn_xpath = (
-                "//a[contains(., 'Maak een PDF')]"
-                " | //a[contains(., 'PDF Openen')]"
-            )
-            pdf_btn = wait.until(EC.element_to_be_clickable((By.XPATH, pdf_btn_xpath)))
+            pdf_btn = wait.until(EC.element_to_be_clickable(
+                (By.XPATH, "//a[contains(., 'Maak een PDF')]")
+            ))
             before = existing_pdfs()
             pdf_btn.click()
 
