@@ -18,7 +18,7 @@
 import logging
 import os
 import time
-from datetime import date
+from datetime import date, datetime
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
@@ -29,7 +29,6 @@ from src.config import (
     INTER_PAGE_DELAY,
     LOG_FILE,
     MAX_RETRIES,
-    MIN_ARTICLE_LENGTH,
     RETRY_BACKOFF,
 )
 from src.fetcher import (
@@ -155,8 +154,7 @@ def _passes_filters(meta: dict, filters: ScraperFilters, puc_id: str) -> bool:
     # Date-range filter
     if meta["doc_date"] and (filters.date_from or filters.date_to):
         try:
-            from datetime import datetime as _dt
-            doc_date = _dt.fromisoformat(str(meta["doc_date"])).date()
+            doc_date = datetime.fromisoformat(str(meta["doc_date"])).date()
             if filters.date_from and doc_date < filters.date_from:
                 logger.info("Skipping %s — date %s before %s", puc_id, doc_date, filters.date_from)
                 return False
@@ -175,10 +173,6 @@ def process_document(client, browser: LazyBrowser, con, url: str, filters: Scrap
     Returns True on success or skip, False on unrecoverable failure.
     """
     puc_id = _puc_id_from_url(url)
-
-    if document_exists(con, puc_id):
-        logger.debug("Already in DB, skipping: %s", puc_id)
-        return True
 
     # Fetch with httpx
     soup = fetch_soup(client, url)

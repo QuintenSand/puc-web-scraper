@@ -98,7 +98,7 @@ Documents not matching the keyword, outside the date range, or already in the da
 
 **Prerequisites**
 
-- Python 3.9+
+- Python 3.10+
 - [uv](https://docs.astral.sh/uv/) package manager
 - Google Chrome — only needed if any documents require PDF download
 
