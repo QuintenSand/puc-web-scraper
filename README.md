@@ -16,6 +16,7 @@ The PUC portal uses path-based routing (server-side rendering), so a browser is 
 ## Features
 
 - **No browser required for most runs** — if all matching documents have HTML content or direct PDF links, Chrome is never opened.
+- **Clean-slate option** — if the database already contains documents, you are asked whether to clear it before starting (requires typing `yes` to confirm).
 - **Interactive filter prompts** — before scraping starts, fetches live category options and asks you to choose validity, categories, date range, and keyword.
 - **Two-phase execution** — collects all matching URLs first, then processes them.
 - **Three-tier text extraction** — prefers HTML article body; falls back to direct PDF download via httpx; finally uses Chrome for JS-driven PDF buttons.
@@ -47,7 +48,7 @@ puc-web-scraper/
 
 ## Filter selection
 
-When you run the script, it asks four questions before touching the network:
+When you run the script, it first asks whether to clear the database (if it already contains documents), then asks four filter questions before touching the network:
 
 ```
 ==================================================
