@@ -172,15 +172,20 @@ def extract_pdf_url(soup: BeautifulSoup) -> str | None:
     """
     for a in soup.find_all("a", href=True):
         href: str = a["href"]
-        text = a.get_text(strip=True).lower()
 
+        # Skip non-navigable hrefs (fragments, JavaScript, empty)
+        if not href or href.startswith("#") or href.lower().startswith("javascript"):
+            continue
+
+        text = a.get_text(strip=True).lower()
         is_pdf_href = href.lower().endswith(".pdf")
         is_pdf_text = "pdf openen" in text or ("pdf" in text and "download" in text)
 
         if is_pdf_href or is_pdf_text:
             if href.startswith("/"):
                 return "https://puc.overheid.nl" + href
-            return href  # already absolute
+            if href.startswith("http"):
+                return href
 
     return None
 
