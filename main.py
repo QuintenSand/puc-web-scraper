@@ -20,10 +20,6 @@ import os
 import time
 from datetime import date, datetime
 
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
-
 from src.browser import LazyBrowser
 from src.config import (
     INTER_PAGE_DELAY,
@@ -42,10 +38,8 @@ from src.fetcher import (
     get_client,
 )
 from src.parser import (
-    existing_pdfs,
     pdf_bytes_to_text,
     pdf_to_text,
-    wait_for_new_pdf,
 )
 from src.prompt import ScraperFilters, ask_filters
 from src.storage import (
@@ -226,39 +220,19 @@ def process_document(client, browser: LazyBrowser, con, url: str, filters: Scrap
                 logger.exception("Direct PDF download failed for %s", puc_id)
 
     if not text:
-        # --- Option C: generated PDF via button click (browser started lazily) ---
-        # Used when the page has no article body and no direct PDF link, but
-        # offers a 'Maak een PDF' button that generates the PDF on the fly.
-        driver, wait = browser.get()
-        driver.get(url)
-        time.sleep(2)
-
-        try:
-            pdf_btn = wait.until(EC.element_to_be_clickable(
-                (By.XPATH, "//a[contains(., 'Maak een PDF')]")
-            ))
-            before = existing_pdfs()
-            pdf_btn.click()
-
+        # --- Option C: JS-driven PDF download (Playwright + bundled Chromium) ---
+        # Used when the page has no article body and no direct PDF link — the
+        # download is triggered by a button click that runs JavaScript.
+        pdf_path = browser.download_pdf(url)
+        if pdf_path:
             try:
-                finish_btn = WebDriverWait(driver, 5).until(
-                    EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Klaar!')]"))
-                )
-                finish_btn.click()
-            except Exception:
-                pass
-
-            pdf_path = wait_for_new_pdf(before)
-            if pdf_path:
                 text = pdf_to_text(pdf_path)
                 source_format = "PDF"
-                os.remove(pdf_path)
-            else:
-                logger.warning("PDF download timed out for %s", puc_id)
-                return False
-
-        except Exception:
-            logger.exception("Error during PDF extraction for %s", url)
+            finally:
+                if os.path.exists(pdf_path):
+                    os.remove(pdf_path)
+        else:
+            logger.warning("Could not retrieve PDF for %s", puc_id)
             return False
 
     if not text or not text.strip():
