@@ -40,6 +40,8 @@ from src.fetcher import (
     fetch_category_options,
     fetch_soup,
     get_client,
+    polite_get,
+    polite_head,
 )
 from src.parser import (
     existing_pdfs,
@@ -211,24 +213,22 @@ def process_document(client, browser: LazyBrowser, con, url: str, filters: Scrap
                 url.rstrip("/") + "/pdf/",
                 url.rstrip("/") + "/download/",
             ):
-                try:
-                    head = client.head(candidate)
-                    ct = head.headers.get("content-type", "")
-                    if head.status_code == 200 and "pdf" in ct.lower():
-                        pdf_url = candidate
-                        break
-                except Exception:
-                    pass
+                head = polite_head(client, candidate)
+                if head is None:
+                    continue
+                ct = head.headers.get("content-type", "")
+                if head.status_code == 200 and "pdf" in ct.lower():
+                    pdf_url = candidate
+                    break
 
         if pdf_url:
             logger.info("Downloading PDF directly: %s", pdf_url)
-            try:
-                resp = client.get(pdf_url)
-                resp.raise_for_status()
+            resp = polite_get(client, pdf_url)
+            if resp is not None and resp.status_code == 200:
                 text = pdf_bytes_to_text(resp.content)
                 source_format = "PDF"
-            except Exception:
-                logger.exception("Direct PDF download failed for %s", puc_id)
+            else:
+                logger.warning("Direct PDF download failed for %s", puc_id)
 
     if not text:
         # --- Option C: generated PDF via button click (browser started lazily) ---

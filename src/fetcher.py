@@ -4,44 +4,179 @@
 # Now that we know the PUC site uses path-based routing (server-side rendering),
 # we can skip Selenium entirely for both list pages and HTML document pages.
 # Chrome is only started if a document requires a PDF download (see browser.py).
+#
+# Politeness / anti-blocking
+# --------------------------
+# Every outbound request goes through a single shared, adaptive throttle so we
+# never hammer the source site (which previously got our IP blocked):
+#
+#   * a minimum delay + random jitter is enforced between *all* requests;
+#   * if the server returns a rate-limit / overload status (429/503/…), we honour
+#     its Retry-After header (or back off with an exponential cooldown) and then
+#     permanently slow the per-request pace for the rest of the run.
+#
+# Use `polite_get` / `polite_head` for raw requests so they share the throttle.
 
 import logging
+import random
 import re
+import threading
 import time
 
 import httpx
 from bs4 import BeautifulSoup
 
-from .config import BASE_URL, INTER_PAGE_DELAY, MIN_ARTICLE_LENGTH
+from .config import (
+    BASE_URL,
+    MAX_COOLDOWN,
+    MAX_REQUEST_DELAY,
+    MAX_RETRIES,
+    MIN_ARTICLE_LENGTH,
+    RATELIMIT_COOLDOWN,
+    REQUEST_DELAY,
+    REQUEST_JITTER,
+    RESPECT_RETRY_AFTER,
+    RETRY_STATUS_CODES,
+    SLOWDOWN_FACTOR,
+    USER_AGENTS,
+)
 from .parser import html_to_text
 
 logger = logging.getLogger(__name__)
 
-_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    ),
-    "Accept-Language": "nl-NL,nl;q=0.9,en;q=0.8",
-}
+
+# ---------------------------------------------------------------------------
+# Adaptive throttle (shared across every request in the process)
+# ---------------------------------------------------------------------------
+
+
+class _Throttle:
+    """
+    Paces outbound requests and adapts to server push-back.
+
+    * `wait()` blocks until at least `base_delay` (+ jitter) has elapsed since
+      the previous request.
+    * `register_rate_limit()` is called when the server signals overload; it
+      returns the number of seconds to cool down and permanently increases the
+      per-request pace so the rest of the run is gentler.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._last_request = 0.0
+        self.base_delay = REQUEST_DELAY
+        self._cooldown = RATELIMIT_COOLDOWN
+        self._hits = 0
+
+    def wait(self) -> None:
+        with self._lock:
+            now = time.monotonic()
+            target = self.base_delay + random.uniform(0, REQUEST_JITTER)
+            elapsed = now - self._last_request
+            if elapsed < target:
+                time.sleep(target - elapsed)
+            self._last_request = time.monotonic()
+
+    def register_rate_limit(self, retry_after: float | None) -> float:
+        """Record a rate-limit hit and return how long to sleep before retrying."""
+        with self._lock:
+            self._hits += 1
+            # Permanently slow the pace for the remainder of the run.
+            self.base_delay = min(self.base_delay * SLOWDOWN_FACTOR, MAX_REQUEST_DELAY)
+
+            if retry_after is not None and RESPECT_RETRY_AFTER:
+                cooldown = min(max(retry_after, 1.0), MAX_COOLDOWN)
+            else:
+                cooldown = min(self._cooldown, MAX_COOLDOWN)
+                self._cooldown = min(self._cooldown * 2, MAX_COOLDOWN)
+            logger.warning(
+                "Rate limited (hit #%d). Cooling down %.0fs; per-request delay now %.1fs.",
+                self._hits,
+                cooldown,
+                self.base_delay,
+            )
+            return cooldown
+
+
+_throttle = _Throttle()
+
+
+def _parse_retry_after(value: str | None) -> float | None:
+    """Parse a Retry-After header value (delta-seconds form) into seconds."""
+    if not value:
+        return None
+    try:
+        return float(value.strip())
+    except (ValueError, AttributeError):
+        # HTTP-date form is rare here; fall back to the adaptive cooldown.
+        return None
 
 
 # ---------------------------------------------------------------------------
 # HTTP client
 # ---------------------------------------------------------------------------
 
+
+def _headers() -> dict[str, str]:
+    return {
+        "User-Agent": random.choice(USER_AGENTS),
+        "Accept": (
+            "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf;q=0.9,*/*;q=0.8"
+        ),
+        "Accept-Language": "nl-NL,nl;q=0.9,en;q=0.8",
+    }
+
+
 def get_client() -> httpx.Client:
-    """Return a configured httpx session with sensible defaults."""
-    return httpx.Client(headers=_HEADERS, follow_redirects=True, timeout=30)
+    """Return a configured httpx session with sensible, polite defaults."""
+    return httpx.Client(headers=_headers(), follow_redirects=True, timeout=30)
+
+
+def polite_get(client: httpx.Client, url: str, **kwargs) -> httpx.Response | None:
+    """
+    Throttled GET that transparently handles rate-limit / overload responses.
+
+    Returns the response on success, or None if it keeps being rate limited
+    or fails. Cooldowns (Retry-After or adaptive exponential backoff) are
+    handled here so every caller benefits without extra code.
+    """
+    for attempt in range(MAX_RETRIES + 1):
+        _throttle.wait()
+        try:
+            response = client.get(url, **kwargs)
+        except Exception:
+            logger.exception("Request error for %s", url)
+            return None
+
+        if response.status_code in RETRY_STATUS_CODES:
+            retry_after = _parse_retry_after(response.headers.get("Retry-After"))
+            if attempt == MAX_RETRIES:
+                logger.error("Still rate limited after %d retries: %s", MAX_RETRIES, url)
+                return None
+            time.sleep(_throttle.register_rate_limit(retry_after))
+            continue
+
+        return response
+
+    return None
+
+
+def polite_head(client: httpx.Client, url: str, **kwargs) -> httpx.Response | None:
+    """Throttled HEAD request. Returns None on error."""
+    _throttle.wait()
+    try:
+        return client.head(url, **kwargs)
+    except Exception:
+        return None
 
 
 def fetch_soup(client: httpx.Client, url: str) -> BeautifulSoup | None:
-    """Fetch *url* and return a parsed BeautifulSoup, or None on failure."""
+    """Fetch *url* (throttled, rate-limit aware) and return a parsed soup."""
+    response = polite_get(client, url)
+    if response is None:
+        return None
     try:
-        response = client.get(url)
         response.raise_for_status()
-        time.sleep(0.5)   # be polite — small delay on every request
         return BeautifulSoup(response.text, "lxml")
     except Exception:
         logger.exception("Failed to fetch %s", url)
@@ -51,6 +186,7 @@ def fetch_soup(client: httpx.Client, url: str) -> BeautifulSoup | None:
 # ---------------------------------------------------------------------------
 # URL construction
 # ---------------------------------------------------------------------------
+
 
 def build_list_url(
     page: int,
@@ -76,6 +212,7 @@ def build_list_url(
 # ---------------------------------------------------------------------------
 # List-page parsing
 # ---------------------------------------------------------------------------
+
 
 def extract_doc_links(soup: BeautifulSoup) -> list[str]:
     """Return all document URLs found on a list page."""
@@ -118,7 +255,7 @@ def fetch_category_options(client: httpx.Client) -> list[tuple[str, str]]:
         # Strip trailing document-count digits that the site appends inside
         # the link text (e.g. "Acute zorg50" → "Acute zorg")
         raw_name = a.get_text(strip=True)
-        name = re.sub(r'\d+$', '', raw_name).strip()
+        name = re.sub(r"\d+$", "", raw_name).strip()
 
         if not name or not code or code in seen or code == "NZA000":
             continue
@@ -133,6 +270,7 @@ def fetch_category_options(client: httpx.Client) -> list[tuple[str, str]]:
 # Document-page parsing
 # ---------------------------------------------------------------------------
 
+
 def extract_metadata(soup: BeautifulSoup) -> dict:
     """Extract title, doc_date, and doc_type from a document page."""
     meta: dict = {"title": None, "doc_date": None, "doc_type": None}
@@ -143,9 +281,7 @@ def extract_metadata(soup: BeautifulSoup) -> dict:
 
     time_el = soup.find("time")
     if time_el:
-        meta["doc_date"] = (
-            time_el.get("datetime") or time_el.get_text(strip=True) or None
-        )
+        meta["doc_date"] = time_el.get("datetime") or time_el.get_text(strip=True) or None
 
     for dt in soup.find_all("dt"):
         label = dt.get_text(strip=True).lower()
@@ -192,7 +328,11 @@ def extract_pdf_url(soup: BeautifulSoup) -> str | None:
         if not href or href.startswith("#") or href.lower().startswith("javascript"):
             continue
         text = a.get_text(strip=True).lower()
-        if href.lower().endswith(".pdf") or "pdf openen" in text or ("pdf" in text and "download" in text):
+        if (
+            href.lower().endswith(".pdf")
+            or "pdf openen" in text
+            or ("pdf" in text and "download" in text)
+        ):
             result = _make_absolute(href)
             if result:
                 return result
