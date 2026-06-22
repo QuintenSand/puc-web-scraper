@@ -586,3 +586,49 @@ Publicatiedatum: 09-12-2014
 Publicatiedatum: 06-05-2013
 2026-04-08 16:10:00,290 - INFO - Scraping finished. Documents — success: 9 | skipped: 0 | failed: 0
 2026-04-08 16:10:00,294 - INFO - Database totals — documents: 10
+2026-06-15 16:11:10,336 - INFO - ====== WebDriver manager ======
+2026-06-15 16:11:21,742 - INFO - Get LATEST chromedriver version for google-chrome
+2026-06-15 16:11:21,885 - INFO - There is no [mac64] chromedriver "149.0.7827.115" for browser google-chrome "149.0.7827" in cache
+2026-06-15 16:11:22,134 - INFO - There is no [mac64] chromedriver "149.0.7827.115" for browser google-chrome "149.0.7827" in cache
+2026-06-15 16:11:22,134 - INFO - Get LATEST chromedriver version for google-chrome
+2026-06-15 16:11:22,427 - INFO - WebDriver version 149.0.7827.115 selected
+2026-06-15 16:11:22,433 - INFO - Modern chrome version https://storage.googleapis.com/chrome-for-testing-public/149.0.7827.115/mac-x64/chromedriver-mac-x64.zip
+2026-06-15 16:11:22,433 - INFO - About to download new driver from https://storage.googleapis.com/chrome-for-testing-public/149.0.7827.115/mac-x64/chromedriver-mac-x64.zip
+2026-06-15 16:11:22,575 - INFO - Driver downloading response is 200
+2026-06-15 16:11:23,049 - INFO - Driver has been saved in cache [/Users/quinten/.wdm/drivers/chromedriver/mac64/149.0.7827.115]
+2026-06-15 16:11:28,937 - INFO - Fetching available filter categories from https://puc.overheid.nl/nza/ …
+2026-06-15 16:11:31,624 - INFO - Found 20 category options.
+2026-06-15 16:13:17,289 - INFO - Phase 1: collecting document URLs from https://puc.overheid.nl/nza/
+2026-06-15 16:13:19,795 - INFO - Filter applied: Geldig vandaag
+2026-06-15 16:13:29,986 - WARNING - Could not apply category filter 'Innovatie168' — skipping.
+2026-06-15 16:13:29,993 - INFO - Crawling list page 1 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/15-06-2026/p/1/)
+2026-06-15 16:13:30,022 - INFO -   Found 40 links on this page
+2026-06-15 16:13:34,495 - INFO - Crawling list page 2 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/15-06-2026/p/2/thm/NZA000/)
+2026-06-15 16:13:34,523 - INFO -   Found 40 links on this page
+2026-06-15 16:13:38,816 - INFO - Crawling list page 3 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/15-06-2026/p/3/thm/NZA000/)
+2026-06-15 16:13:38,843 - INFO -   Found 40 links on this page
+2026-06-15 16:13:43,355 - INFO - Crawling list page 4 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/15-06-2026/p/4/thm/NZA000/)
+2026-06-15 16:13:43,380 - INFO -   Found 40 links on this page
+2026-06-15 16:13:47,812 - INFO - Crawling list page 5 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/15-06-2026/p/5/thm/NZA000/)
+2026-06-15 16:13:47,837 - INFO -   Found 40 links on this page
+2026-06-15 16:13:52,066 - INFO - Crawling list page 6 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/15-06-2026/p/6/thm/NZA000/)
+2026-06-15 16:13:52,097 - INFO -   Found 40 links on this page
+2026-06-15 16:13:56,395 - INFO - Crawling list page 7 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/15-06-2026/p/7/thm/NZA000/)
+2026-06-15 16:13:56,426 - INFO -   Found 40 links on this page
+2026-06-15 16:13:57,059 - WARNING - Retrying (Retry(total=2, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ConnectionResetError(54, 'Connection reset by peer')': /session/05230bf8728bffc3292e3e234918ac30
+2026-06-15 16:13:57,068 - WARNING - Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError("HTTPConnection(host='localhost', port=57198): Failed to establish a new connection: [Errno 61] Connection refused")': /session/05230bf8728bffc3292e3e234918ac30
+2026-06-15 16:13:57,072 - WARNING - Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError("HTTPConnection(host='localhost', port=57198): Failed to establish a new connection: [Errno 61] Connection refused")': /session/05230bf8728bffc3292e3e234918ac30
+2026-06-15 16:13:59,984 - INFO - ====== WebDriver manager ======
+2026-06-15 16:14:00,389 - INFO - Driver [/Users/quinten/.wdm/drivers/chromedriver/mac64/149.0.7827.115/chromedriver-mac-x64/chromedriver] found in cache by browser version
+2026-06-15 16:14:02,889 - INFO - Fetching available filter categories from https://puc.overheid.nl/nza/ …
+2026-06-15 16:14:07,785 - INFO - Found 20 category options.
+2026-06-15 16:14:27,419 - INFO - Phase 1: collecting document URLs from https://puc.overheid.nl/nza/
+2026-06-15 16:14:29,156 - INFO - Filter applied: Geldig vandaag
+2026-06-15 16:14:30,947 - INFO - Filter applied: category = Consultatie9
+2026-06-15 16:14:32,248 - INFO - Crawling list page 1 (https://puc.overheid.nl/nza/zorgsectoren/pagina/NZA000/-/gdlv/0/gd/15-06-2026/p/1/inf/consultatie/)
+2026-06-15 16:14:32,275 - INFO -   Found 18 links on this page
+2026-06-15 16:14:32,396 - INFO - No 'Volgende' button found — reached last page.
+2026-06-15 16:14:32,396 - INFO - Phase 1 complete. Collected 9 unique URLs.
+2026-06-15 16:14:32,396 - INFO - Phase 2: processing 9 documents
+2026-06-15 16:14:32,566 - INFO - Scraping finished. Documents — success: 0 | skipped: 9 | failed: 0
+2026-06-15 16:14:32,566 - INFO - Database totals — documents: 10
