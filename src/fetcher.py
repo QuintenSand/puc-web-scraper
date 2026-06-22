@@ -5,18 +5,25 @@
 # we can skip Selenium entirely for both list pages and HTML document pages.
 # Chrome is only started if a document requires a PDF download (see browser.py).
 #
-# Politeness / anti-blocking
-# --------------------------
+# Politeness / anti-blocking (AIMD self-healing)
+# ----------------------------------------------
 # Every outbound request goes through a single shared, adaptive throttle so we
-# never hammer the source site (which previously got our IP blocked):
+# never hammer the source site (which previously got our IP blocked) — but,
+# unlike the old throttle, it RECOVERS on its own:
 #
-#   * a minimum delay + random jitter is enforced between *all* requests;
-#   * if the server returns a rate-limit / overload status (429/503/…), we honour
-#     its Retry-After header (or back off with an exponential cooldown) and then
-#     permanently slow the per-request pace for the rest of the run.
+#   * requests are spaced by a minimum delay + random jitter;
+#   * a rate-limit / overload status (429/503/…) MULTIPLIES the delay and
+#     triggers a short cooldown (honouring Retry-After when present);
+#   * sustained success ADDITIVELY speeds the pace back up toward the floor.
+#
+# The spacing uses a slot-reservation scheme: each worker reserves its next
+# send slot under a short lock and then sleeps OUTSIDE the lock, so different
+# documents' network/parse time genuinely overlaps across worker threads
+# (real concurrency, capped at ~1 / current-delay requests per second).
 #
 # Use `polite_get` / `polite_head` for raw requests so they share the throttle.
 
+import email.utils
 import logging
 import random
 import re
@@ -32,12 +39,15 @@ from .config import (
     MAX_REQUEST_DELAY,
     MAX_RETRIES,
     MIN_ARTICLE_LENGTH,
+    MIN_REQUEST_DELAY,
     RATELIMIT_COOLDOWN,
     REQUEST_DELAY,
     REQUEST_JITTER,
     RESPECT_RETRY_AFTER,
     RETRY_STATUS_CODES,
     SLOWDOWN_FACTOR,
+    SPEEDUP_AFTER,
+    SPEEDUP_STEP,
     USER_AGENTS,
 )
 from .parser import html_to_text
@@ -52,36 +62,62 @@ logger = logging.getLogger(__name__)
 
 class _Throttle:
     """
-    Paces outbound requests and adapts to server push-back.
+    Paces outbound requests with an AIMD (additive-increase / multiplicative-
+    decrease) strategy and adapts to server push-back *in both directions*.
 
-    * `wait()` blocks until at least `base_delay` (+ jitter) has elapsed since
-      the previous request.
-    * `register_rate_limit()` is called when the server signals overload; it
-      returns the number of seconds to cool down and permanently increases the
-      per-request pace so the rest of the run is gentler.
+    * `wait()` reserves the next send slot and blocks (outside the lock) until
+      it arrives, so the global request-start rate stays ~1/base_delay while
+      different requests still overlap across worker threads.
+    * `register_success()` records a good response; after enough consecutive
+      successes it shaves the per-request delay back down toward the floor.
+    * `register_rate_limit()` records server push-back; it multiplies the delay
+      (up to a cap) and returns how long to cool down before retrying.
     """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._last_request = 0.0
+        self._next_slot = 0.0
         self.base_delay = REQUEST_DELAY
         self._cooldown = RATELIMIT_COOLDOWN
+        self._successes = 0
         self._hits = 0
 
     def wait(self) -> None:
+        """Reserve the next send slot, then sleep (outside the lock) until it."""
         with self._lock:
             now = time.monotonic()
-            target = self.base_delay + random.uniform(0, REQUEST_JITTER)
-            elapsed = now - self._last_request
-            if elapsed < target:
-                time.sleep(target - elapsed)
-            self._last_request = time.monotonic()
+            interval = self.base_delay + random.uniform(0, REQUEST_JITTER)
+            # Chain slots so concurrent callers each get a distinct future slot.
+            self._next_slot = max(now, self._next_slot) + interval
+            target = self._next_slot
+        delay = target - time.monotonic()
+        if delay > 0:
+            time.sleep(delay)
+
+    def register_success(self) -> None:
+        """Record a successful response; speed up after sustained success."""
+        with self._lock:
+            self._successes += 1
+            # Recovery: a clean streak relaxes the cooldown escalation and,
+            # every SPEEDUP_AFTER successes, additively speeds the pace back up.
+            if self._successes >= SPEEDUP_AFTER:
+                self._successes = 0
+                self._cooldown = RATELIMIT_COOLDOWN
+                if self.base_delay > MIN_REQUEST_DELAY:
+                    self.base_delay = max(
+                        MIN_REQUEST_DELAY, self.base_delay - SPEEDUP_STEP
+                    )
+                    logger.debug(
+                        "Sustained success — per-request delay eased to %.2fs.",
+                        self.base_delay,
+                    )
 
     def register_rate_limit(self, retry_after: float | None) -> float:
         """Record a rate-limit hit and return how long to sleep before retrying."""
         with self._lock:
             self._hits += 1
-            # Permanently slow the pace for the remainder of the run.
+            self._successes = 0
+            # Multiplicative decrease: back off the pace (bounded by the cap).
             self.base_delay = min(self.base_delay * SLOWDOWN_FACTOR, MAX_REQUEST_DELAY)
 
             if retry_after is not None and RESPECT_RETRY_AFTER:
@@ -90,7 +126,7 @@ class _Throttle:
                 cooldown = min(self._cooldown, MAX_COOLDOWN)
                 self._cooldown = min(self._cooldown * 2, MAX_COOLDOWN)
             logger.warning(
-                "Rate limited (hit #%d). Cooling down %.0fs; per-request delay now %.1fs.",
+                "Rate limited (hit #%d). Cooling down %.0fs; per-request delay now %.2fs.",
                 self._hits,
                 cooldown,
                 self.base_delay,
@@ -102,14 +138,24 @@ _throttle = _Throttle()
 
 
 def _parse_retry_after(value: str | None) -> float | None:
-    """Parse a Retry-After header value (delta-seconds form) into seconds."""
+    """Parse a Retry-After header (delta-seconds or HTTP-date) into seconds."""
     if not value:
         return None
+    value = value.strip()
+    # Delta-seconds form, e.g. "120"
     try:
-        return float(value.strip())
+        return float(value)
     except (ValueError, AttributeError):
-        # HTTP-date form is rare here; fall back to the adaptive cooldown.
-        return None
+        pass
+    # HTTP-date form, e.g. "Wed, 21 Oct 2025 07:28:00 GMT"
+    try:
+        dt = email.utils.parsedate_to_datetime(value)
+        if dt is not None:
+            delta = dt.timestamp() - time.time()
+            return delta if delta > 0 else None
+    except (TypeError, ValueError):
+        pass
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -128,8 +174,15 @@ def _headers() -> dict[str, str]:
 
 
 def get_client() -> httpx.Client:
-    """Return a configured httpx session with sensible, polite defaults."""
-    return httpx.Client(headers=_headers(), follow_redirects=True, timeout=30)
+    """Return a configured httpx session with sensible, polite defaults.
+
+    Connection pooling is sized for the worker pool so concurrent requests
+    reuse keep-alive connections instead of opening a fresh socket each time.
+    """
+    limits = httpx.Limits(max_connections=20, max_keepalive_connections=20)
+    return httpx.Client(
+        headers=_headers(), follow_redirects=True, timeout=30, limits=limits
+    )
 
 
 def polite_get(client: httpx.Client, url: str, **kwargs) -> httpx.Response | None:
@@ -137,8 +190,8 @@ def polite_get(client: httpx.Client, url: str, **kwargs) -> httpx.Response | Non
     Throttled GET that transparently handles rate-limit / overload responses.
 
     Returns the response on success, or None if it keeps being rate limited
-    or fails. Cooldowns (Retry-After or adaptive exponential backoff) are
-    handled here so every caller benefits without extra code.
+    or fails. Cooldowns (Retry-After or adaptive backoff) are handled here so
+    every caller benefits, and success feeds the throttle's speed recovery.
     """
     for attempt in range(MAX_RETRIES + 1):
         _throttle.wait()
@@ -156,18 +209,29 @@ def polite_get(client: httpx.Client, url: str, **kwargs) -> httpx.Response | Non
             time.sleep(_throttle.register_rate_limit(retry_after))
             continue
 
+        _throttle.register_success()
         return response
 
     return None
 
 
 def polite_head(client: httpx.Client, url: str, **kwargs) -> httpx.Response | None:
-    """Throttled HEAD request. Returns None on error."""
+    """Throttled HEAD request that also respects rate-limit push-back."""
     _throttle.wait()
     try:
-        return client.head(url, **kwargs)
+        response = client.head(url, **kwargs)
     except Exception:
         return None
+
+    if response.status_code in RETRY_STATUS_CODES:
+        # Don't retry HEADs (they're best-effort probes), but do let the
+        # throttle back off so following GETs slow down too.
+        retry_after = _parse_retry_after(response.headers.get("Retry-After"))
+        _throttle.register_rate_limit(retry_after)
+        return None
+
+    _throttle.register_success()
+    return response
 
 
 def fetch_soup(client: httpx.Client, url: str) -> BeautifulSoup | None:

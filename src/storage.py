@@ -84,6 +84,17 @@ def document_exists(con: duckdb.DuckDBPyConnection, puc_id: str) -> bool:
     return row is not None
 
 
+def existing_puc_ids(con: duckdb.DuckDBPyConnection) -> set[str]:
+    """
+    Return every puc_id already stored, in a SINGLE query.
+
+    Filtering a large batch with document_exists() means one locked DB
+    round-trip per URL (thousands of them). Loading the whole id set once and
+    checking membership in Python is dramatically faster for the skip phase.
+    """
+    return {row[0] for row in con.execute("SELECT puc_id FROM documents").fetchall()}
+
+
 def save_document(
     con: duckdb.DuckDBPyConnection,
     puc_id: str,

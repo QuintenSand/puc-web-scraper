@@ -17,7 +17,9 @@
 
 import logging
 import os
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 
 from selenium.webdriver.common.by import By
@@ -26,9 +28,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from src.browser import LazyBrowser
 from src.config import (
-    INTER_PAGE_DELAY,
     LOG_FILE,
     MAX_RETRIES,
+    MAX_WORKERS,
     RETRY_BACKOFF,
 )
 from src.fetcher import (
@@ -41,7 +43,6 @@ from src.fetcher import (
     fetch_soup,
     get_client,
     polite_get,
-    polite_head,
 )
 from src.parser import (
     existing_pdfs,
@@ -52,7 +53,7 @@ from src.parser import (
 from src.prompt import ScraperFilters, ask_clear_db, ask_filters
 from src.storage import (
     count_documents,
-    document_exists,
+    existing_puc_ids,
     get_connection,
     save_document,
 )
@@ -69,6 +70,11 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger(__name__)
+
+# DuckDB connections and the single Selenium browser are NOT thread-safe, so
+# all access to them from worker threads is serialized through these locks.
+_db_lock = threading.Lock()
+_browser_lock = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +136,8 @@ def collect_urls(client, filters: ScraperFilters) -> list[str]:
             all_urls.extend(links)
             logger.info("  Page %d: %d links (total so far: %d)", page, len(links), len(all_urls))
             page += 1
-            time.sleep(INTER_PAGE_DELAY)
+            # No extra sleep here: every request is already paced by the shared
+            # throttle in src/fetcher.py.
 
     unique = list(dict.fromkeys(all_urls))
     logger.info("Phase 1 complete. Collected %d unique URLs.", len(unique))
@@ -176,6 +183,44 @@ def _passes_filters(meta: dict, filters: ScraperFilters, puc_id: str) -> bool:
     return True
 
 
+def _extract_via_browser(browser: LazyBrowser, url: str, puc_id: str) -> str | None:
+    """
+    Last-resort PDF extraction: click the page's 'Maak een PDF' button and read
+    the generated file. Selenium/Chrome is a single shared instance and is NOT
+    thread-safe, so the whole interaction runs under _browser_lock — only one
+    worker uses the browser at a time. Returns extracted text, or None.
+    """
+    with _browser_lock:
+        driver, wait = browser.get()
+        driver.get(url)
+        time.sleep(2)
+        try:
+            pdf_btn = wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Maak een PDF')]"))
+            )
+            before = existing_pdfs()
+            pdf_btn.click()
+
+            try:
+                finish_btn = WebDriverWait(driver, 5).until(
+                    EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Klaar!')]"))
+                )
+                finish_btn.click()
+            except Exception:
+                pass
+
+            pdf_path = wait_for_new_pdf(before)
+            if pdf_path:
+                text = pdf_to_text(pdf_path)
+                os.remove(pdf_path)
+                return text
+            logger.warning("PDF download timed out for %s", puc_id)
+            return None
+        except Exception:
+            logger.exception("Error during PDF extraction for %s", url)
+            return None
+
+
 def process_document(client, browser: LazyBrowser, con, url: str, filters: ScraperFilters) -> bool:
     """
     Fetch *url*, extract text (HTML or PDF), apply filters, and save to DuckDB.
@@ -207,79 +252,52 @@ def process_document(client, browser: LazyBrowser, con, url: str, filters: Scrap
 
         pdf_url = extract_pdf_url(soup)
 
-        if not pdf_url:
-            # B2: some PUC docs serve their PDF at the document URL + /pdf/
-            for candidate in (
-                url.rstrip("/") + "/pdf/",
-                url.rstrip("/") + "/download/",
-            ):
-                head = polite_head(client, candidate)
-                if head is None:
-                    continue
-                ct = head.headers.get("content-type", "")
-                if head.status_code == 200 and "pdf" in ct.lower():
-                    pdf_url = candidate
-                    break
-
-        if pdf_url:
-            logger.info("Downloading PDF directly: %s", pdf_url)
-            resp = polite_get(client, pdf_url)
-            if resp is not None and resp.status_code == 200:
+        # Candidate PDF URLs: the one parsed from the page (if any), else the
+        # two predictable URL variants. We GET each directly and check the
+        # response content-type, instead of doing a separate HEAD probe first
+        # — that halves the request count for every PDF document.
+        candidates = (
+            [pdf_url]
+            if pdf_url
+            else [url.rstrip("/") + "/pdf/", url.rstrip("/") + "/download/"]
+        )
+        for candidate in candidates:
+            resp = polite_get(client, candidate)
+            if resp is None or resp.status_code != 200:
+                continue
+            ct = resp.headers.get("content-type", "").lower()
+            if "pdf" in ct or candidate.lower().endswith(".pdf"):
+                logger.info("Downloading PDF directly: %s", candidate)
                 text = pdf_bytes_to_text(resp.content)
                 source_format = "PDF"
-            else:
-                logger.warning("Direct PDF download failed for %s", puc_id)
+                break
+        if not text:
+            logger.warning("Direct PDF download failed for %s", puc_id)
 
     if not text:
-        # --- Option C: generated PDF via button click (browser started lazily) ---
-        # Used when the page has no article body and no direct PDF link, but
-        # offers a 'Maak een PDF' button that generates the PDF on the fly.
-        driver, wait = browser.get()
-        driver.get(url)
-        time.sleep(2)
-
-        try:
-            pdf_btn = wait.until(
-                EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Maak een PDF')]"))
-            )
-            before = existing_pdfs()
-            pdf_btn.click()
-
-            try:
-                finish_btn = WebDriverWait(driver, 5).until(
-                    EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Klaar!')]"))
-                )
-                finish_btn.click()
-            except Exception:
-                pass
-
-            pdf_path = wait_for_new_pdf(before)
-            if pdf_path:
-                text = pdf_to_text(pdf_path)
-                source_format = "PDF"
-                os.remove(pdf_path)
-            else:
-                logger.warning("PDF download timed out for %s", puc_id)
-                return False
-
-        except Exception:
-            logger.exception("Error during PDF extraction for %s", url)
-            return False
+        # --- Option C: generated PDF via button click (browser, serialized) ---
+        # Page has no article body and no direct PDF link, but offers a
+        # 'Maak een PDF' button. Selenium is not thread-safe, so this is
+        # guarded by a lock — only one worker drives Chrome at a time.
+        text = _extract_via_browser(browser, url, puc_id)
+        if text:
+            source_format = "PDF"
 
     if not text or not text.strip():
         logger.warning("No text extracted from %s", puc_id)
         return False
 
-    save_document(
-        con,
-        puc_id,
-        url,
-        text,
-        title=meta["title"],
-        doc_date=meta["doc_date"],
-        doc_type=meta["doc_type"],
-        source_format=source_format,
-    )
+    with _db_lock:
+        save_document(
+            con,
+            puc_id,
+            url,
+            text,
+            title=meta["title"],
+            doc_date=meta["doc_date"],
+            doc_type=meta["doc_type"],
+            source_format=source_format,
+        )
     logger.info(
         "Saved %s | format=%s | chars=%d | title=%s",
         puc_id,
@@ -311,23 +329,44 @@ def main() -> None:
         # Phase 1 — collect URLs (httpx only, no browser)
         urls = collect_urls(client, filters)
 
-        # Phase 2 — process documents
-        logger.info("Phase 2: processing %d documents", len(urls))
-        success, skipped, failed = 0, 0, 0
+        # Phase 2 — process documents (parallel; rate still capped globally)
+        # Skip documents already in the DB up front (cheap, single-threaded) so
+        # the worker pool only handles new work.
+        # One query to load all stored ids, then a cheap in-memory check —
+        # avoids thousands of individual (locked) document_exists() calls.
+        existing = existing_puc_ids(con)
+        pending = [u for u in urls if _puc_id_from_url(u) not in existing]
+        skipped = len(urls) - len(pending)
+        success, failed, done = 0, 0, 0
+        logger.info(
+            "Phase 2: %d new documents (%d already in DB) — %d parallel workers",
+            len(pending), skipped, MAX_WORKERS,
+        )
 
         try:
-            for i, url in enumerate(urls, 1):
-                puc_id = _puc_id_from_url(url)
-                if document_exists(con, puc_id):
-                    skipped += 1
-                    continue
-
-                logger.info("[%d/%d] Processing %s", i, len(urls), puc_id)
-                ok = with_retry(process_document, client, browser, con, url, filters)
-                if ok:
-                    success += 1
-                else:
-                    failed += 1
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+                futures = {
+                    pool.submit(
+                        with_retry, process_document, client, browser, con, url, filters
+                    ): url
+                    for url in pending
+                }
+                for future in as_completed(futures):
+                    done += 1
+                    try:
+                        ok = future.result()
+                    except Exception:
+                        logger.exception("Worker crashed on %s", futures[future])
+                        ok = False
+                    if ok:
+                        success += 1
+                    else:
+                        failed += 1
+                    if done % 50 == 0 or done == len(pending):
+                        logger.info(
+                            "Progress: %d/%d (ok=%d failed=%d)",
+                            done, len(pending), success, failed,
+                        )
         finally:
             browser.close()
 

@@ -16,37 +16,60 @@ PDF_DOWNLOAD_TIMEOUT = 30  # seconds to wait for a PDF to appear
 INTER_PAGE_DELAY = 3  # seconds between pagination clicks
 MIN_ARTICLE_LENGTH = 300  # characters; below this we fall back to PDF
 
-# --- Politeness / rate limiting -------------------------------------------
-# These settings keep the scraper under the server's radar so the source
-# site does not block our IP for requesting too many documents too quickly.
-#
-# Every outbound request goes through a shared adaptive throttle (see
-# src/fetcher.py). The throttle waits REQUEST_DELAY seconds (plus a random
-# jitter) between requests. If the server signals overload (HTTP 429/503),
-# the throttle automatically slows down and stays slow for the rest of the
-# run, then gently speeds back up after sustained success.
+# Number of documents processed in parallel in Phase 2. Workers share the
+# adaptive throttle below. Because the throttle only holds its lock while
+# *spacing* requests (not while a request is in flight), extra workers let
+# network/parse time of different documents overlap — so raising this DOES
+# improve throughput up to the throttle's req/sec ceiling. 8 is a good balance.
+MAX_WORKERS = 8
 
-# Base seconds to wait between *every* HTTP request. Raise this if you still
-# get blocked; lower it (carefully) if runs are too slow and you trust the site.
-REQUEST_DELAY = 2.0
-# Extra random seconds (0..REQUEST_JITTER) added to each wait. Randomising the
-# cadence avoids the perfectly-regular request pattern that flags bots.
-REQUEST_JITTER = 1.5
+# --- Politeness / rate limiting (AIMD self-healing) -----------------------
+# Every outbound request goes through a single shared adaptive throttle (see
+# src/fetcher.py). It uses an AIMD ("additive-increase / multiplicative-
+# decrease") strategy, the same idea TCP uses for congestion control:
+#
+#   * Steady state: it spaces requests REQUEST_DELAY (+ jitter) seconds apart.
+#   * Server pushes back (HTTP 429/503/…): it MULTIPLIES the delay by
+#     SLOWDOWN_FACTOR (up to MAX_REQUEST_DELAY) and cools down briefly,
+#     honouring the server's Retry-After header when present.
+#   * Sustained success: after SPEEDUP_AFTER consecutive good responses it
+#     ADDITIVELY shaves SPEEDUP_STEP off the delay (down to MIN_REQUEST_DELAY),
+#     so the scraper continuously feels out the fastest pace the server
+#     tolerates and RECOVERS automatically instead of staying crippled.
+#
+# This is the key fix over the old throttle, which could only ever get slower:
+# a few rate-limit hits used to pin it at 30s/request with 15-minute cooldowns
+# for the rest of the run.
+
+# Starting / steady-state seconds between request *starts* (global cap on rate
+# ≈ 1 / REQUEST_DELAY req/sec). AIMD adjusts it within
+# [MIN_REQUEST_DELAY, MAX_REQUEST_DELAY] at runtime.
+REQUEST_DELAY = 0.4
+# Fastest the throttle is ever allowed to go (the speed floor).
+MIN_REQUEST_DELAY = 0.25
+# Extra random seconds (0..REQUEST_JITTER) added to each wait to avoid a
+# perfectly-regular, bot-like cadence.
+REQUEST_JITTER = 0.2
+
+# Speed recovery: after this many consecutive successful requests, shave
+# SPEEDUP_STEP seconds off the per-request delay (down to MIN_REQUEST_DELAY).
+SPEEDUP_AFTER = 12
+SPEEDUP_STEP = 0.1
 
 # HTTP status codes that mean "you are being rate limited / server is busy".
-# Seeing one of these triggers a cooldown instead of an immediate retry.
 RETRY_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
 # Honour the server's `Retry-After` header when present.
 RESPECT_RETRY_AFTER = True
-# Base cooldown (seconds) applied the first time we are rate limited and no
-# Retry-After header is given. Doubles on repeated hits, capped at MAX_COOLDOWN.
-RATELIMIT_COOLDOWN = 60.0
-MAX_COOLDOWN = 900.0  # never wait longer than 15 minutes
-# After a rate-limit hit, the per-request delay is multiplied by this factor
-# (persisted for the rest of the run) so we approach the site more gently.
+# Base cooldown (seconds) the first time we are rate limited with no
+# Retry-After header. Doubles on repeated *consecutive* hits, capped at
+# MAX_COOLDOWN, and resets once the scraper recovers.
+RATELIMIT_COOLDOWN = 20.0
+MAX_COOLDOWN = 120.0  # never self-impose more than 2 minutes (was 15 min)
+# On a rate-limit hit the per-request delay is multiplied by this factor.
 SLOWDOWN_FACTOR = 1.5
-# Hard ceiling for the adaptive per-request delay.
-MAX_REQUEST_DELAY = 30.0
+# Hard ceiling for the adaptive per-request delay (was 30s — caused the
+# death-spiral). Kept low because the throttle now recovers on its own.
+MAX_REQUEST_DELAY = 8.0
 
 # User-Agent strings rotated per client to avoid a single static fingerprint.
 USER_AGENTS = [

@@ -24,7 +24,7 @@ The PUC portal uses path-based routing (server-side rendering), so a browser is 
 - **Enriched metadata** — stores title, publication date, and document type alongside the full text.
 - **Resumable** — documents already in the database are skipped automatically.
 - **Automatic schema migration** — existing databases from older versions are upgraded automatically.
-- **Polite rate limiting** — a shared adaptive throttle paces every request (randomised delay + jitter). If the server returns 429/503 it honours `Retry-After`, cools down, and permanently slows the pace for the rest of the run — to avoid IP blocks. Tunables live in `src/config.py` (`REQUEST_DELAY`, `REQUEST_JITTER`, `RATELIMIT_COOLDOWN`, …).
+- **Self-healing rate limiting (AIMD)** — a shared adaptive throttle paces every request (randomised delay + jitter). If the server returns 429/503 it honours `Retry-After`, briefly cools down (capped at `MAX_COOLDOWN`), and slows the pace by `SLOWDOWN_FACTOR` (bounded by `MAX_REQUEST_DELAY`). After `SPEEDUP_AFTER` consecutive successes it speeds back up toward `MIN_REQUEST_DELAY`, so the scraper continuously finds the fastest pace the server tolerates and recovers automatically instead of staying crippled for the rest of the run. Tunables live in `src/config.py` (`REQUEST_DELAY`, `MIN_REQUEST_DELAY`, `REQUEST_JITTER`, `SPEEDUP_AFTER`, `RATELIMIT_COOLDOWN`, `MAX_COOLDOWN`, `MAX_REQUEST_DELAY`, …).
 - **Rotating User-Agent** — a different browser User-Agent per run to avoid a static fingerprint.
 - **Retry logic** — exponential backoff on transient failures.
 - **Inspection script** — `check_db.py` prints a full overview with stats and content preview.
